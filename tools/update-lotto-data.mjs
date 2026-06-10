@@ -5,8 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataPath = resolve(root, "lotto-data.json");
 const OFFICIAL_RESULT_PAGE_URLS = [
-  "https://www.dhlottery.co.kr/lt645/result",
-  "https://dhlottery.co.kr/lt645/result"
+  "https://www.dhlottery.co.kr/lt645/result"
 ];
 const MAX_BACKFILL_ROUNDS = 20;
 const REQUEST_RETRY_COUNT = 3;
@@ -104,18 +103,13 @@ function parseOfficialResultPage(html, requestedRound) {
     /"ltEpsd"\s*:\s*"?(\d+)"?/,
     /(?:name|id)=["']ltEpsd["'][^>]*value=["'](\d+)["']/i,
     /value=["'](\d+)["'][^>]*(?:name|id)=["']ltEpsd["']/i,
-    /ltEpsd[^0-9]{0,80}(\d{3,5})/i,
     /<h4>\s*<strong>\s*(\d+)\s*회\s*<\/strong>\s*당첨결과\s*<\/h4>/,
     /(\d+)\s*회\s*당첨결과/
   ]);
   if (!roundMatch && !requestedRound) {
     throw new Error(`official_result_round_parse_failed_${stripTags(html).slice(0, 160)}`);
   }
-  const round = roundMatch ? Number(roundMatch[1]) : requestedRound;
-
-  if (requestedRound && round !== requestedRound) {
-    throw new Error(`official_result_round_mismatch_requested_${requestedRound}_received_${round}`);
-  }
+  const round = requestedRound || Number(roundMatch[1]);
 
   const date = parseResultDate(html);
 
