@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>로또 번호 분석</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --text: #17191f;
+      --muted: #667085;
+      --line: #d9dee8;
+      --blue: #1f6feb;
+      --green: #168a53;
+      --red: #d1242f;
+      --yellow: #f2b705;
+      --ink-soft: #303642;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app-shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    p { line-height: 1.55; }
+
+    .panel, .status-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+
+    .status-panel strong { display: block; margin-bottom: 6px; }
+    .status-panel p { margin: 4px 0; color: var(--muted); }
+
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue);
+      color: white;
+      padding: 10px 14px;
+      cursor: pointer;
+      min-height: 40px;
+      white-space: nowrap;
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: wait;
+    }
+
+    .tab-button {
+      background: #e9edf5;
+      color: var(--text);
+    }
+
+    .tab-button.active {
+      background: var(--blue);
+      color: white;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .metric-value {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .warning {
+      color: #7a4a00;
+      background: #fff7df;
+      border: 1px solid #f2d782;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .error {
+      color: #8f111b;
+      background: #fff0f1;
+      border: 1px solid #f1b9be;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .balls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ball {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: white;
+      flex: 0 0 auto;
+    }
+
+    .ball.n1 { background: #f2b705; color: #1f2328; }
+    .ball.n2 { background: #218bff; }
+    .ball.n3 { background: #d1242f; }
+    .ball.n4 { background: #6e7781; }
+    .ball.n5 { background: #168a53; }
+
+    .recommendation-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .recommendation-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    input, select {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: white;
+      color: var(--text);
+    }
+
+    input[type="search"], input[type="text"] {
+      width: min(100%, 280px);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      background: white;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 13px;
+      background: #fafbfc;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .mini-bars {
+      display: grid;
+      gap: 8px;
+    }
+
+    .mini-bar {
+      display: grid;
+      grid-template-columns: 64px 1fr 84px;
+      gap: 8px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .bar-track {
+      height: 8px;
+      border-radius: 999px;
+      background: #e9edf5;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+
+    @media (max-width: 640px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .app-shell { width: min(100% - 20px, 1180px); }
+      .mini-bar { grid-template-columns: 52px 1fr; }
+      .mini-bar span:last-child { grid-column: 1 / -1; color: var(--muted); }
+      table { min-width: 660px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Lotto 6/45 Dashboard</p>
+        <h1>로또 번호 분석</h1>
+      </div>
+      <button id="refreshButton" type="button">데이터 다시 읽기</button>
+    </header>
+
+    <nav class="view-tabs" aria-label="화면 선택">
+      <button class="tab-button active" type="button" data-view="dashboard">대시보드</button>
+      <button class="tab-button" type="button" data-view="patterns">패턴 분석</button>
+      <button class="tab-button" type="button" data-view="history">역대 당첨번호</button>
+    </nav>
+
+    <section id="statusPanel" class="status-panel"></section>
+
+    <div id="dashboardView" class="view active">
+      <section id="latestPanel" class="panel"></section>
+      <section id="recommendPanel" class="panel"></section>
+      <section id="statsPanel" class="panel"></section>
+      <section id="patternPanel" class="panel"></section>
+    </div>
+
+    <div id="patternsView" class="view">
+      <section id="significancePanel" class="panel"></section>
+    </div>
+
+    <div id="historyView" class="view">
+      <section id="historyPanel" class="panel"></section>
+    </div>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "lotto-dashboard:v1";
+    const DATA_URL = "lotto-data.json";
+    const OFFICIAL_DRAW_API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber";
+    const MAX_OFFICIAL_LOOKAHEAD = 12;
+
+    const defaultState = {
+      schemaVersion: 1,
+      updatedAt: null,
+      recommendations: [],
+      preferences: {
+        statWindow: 100,
+        recommendationCount: 5,
+        historyLimit: 50,
+        historyQuery: ""
+      }
+    };
+
+    let appState = loadState();
+    let drawData = {
+      schemaVersion: 1,
+      source: "not-loaded",
+      updatedAt: null,
+      latestRound: 0,
+      draws: []
+    };
+    let currentLoadStatus = {
+      title: "데이터 준비",
+      message: "lotto-data.json을 불러오는 중입니다."
+    };
+
+    function cloneDefaultState() {
+      return JSON.parse(JSON.stringify(defaultState));
+    }
+
+    function normalizeDraw(draw) {
+      return {
+        round: Number(draw.round),
+        date: String(draw.date || ""),
+        numbers: (draw.numbers || []).map(Number).slice(0, 6).sort((a, b) => a - b),
+        bonus: Number(draw.bonus),
+        firstPrizeAmount: Number(draw.firstPrizeAmount || 0),
+        firstWinnerCount: Number(draw.firstWinnerCount || 0),
+        totalSellAmount: Number(draw.totalSellAmount || 0)
+      };
+    }
+
+    function isValidDraw(draw) {
+      return Number.isInteger(draw.round)
+        && draw.round > 0
+        && Array.isArray(draw.numbers)
+        && draw.numbers.length === 6
+        && new Set(draw.numbers).size === 6
+        && draw.numbers.every((number) => Number.isInteger(number) && number >= 1 && number <= 45)
+        && Number.isInteger(draw.bonus)
+        && draw.bonus >= 1
+        && draw.bonus <= 45;
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return cloneDefaultState();
+        const parsed = JSON.parse(raw);
+        if (parsed.schemaVersion !== 1) return cloneDefaultState();
+        return {
+          ...cloneDefaultState(),
+          ...parsed,
+          recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+          preferences: {
+            ...cloneDefaultState().preferences,
+            ...(parsed.preferences || {})
+          }
+        };
+      } catch (error) {
+        console.warn("storage_load_failed", error);
+        return cloneDefaultState();
+      }
+    }
+
+    function saveState(nextState) {
+      const stateToSave = {
+        ...nextState,
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+      return stateToSave;
+    }
+
+    async function loadDrawData() {
+      const response = await fetch(DATA_URL, { cache: "no-store" });
+      if (!response.ok) throw new Error(`data_fetch_http_${response.status}`);
+      const data = await response.json();
+      if (data.schemaVersion !== 1 || !Array.isArray(data.draws)) {
+        throw new Error("data_schema_invalid");
+      }
+      const draws = data.draws.map(normalizeDraw).filter(isValidDraw);
+      if (draws.length === 0) throw new Error("data_draws_empty");
+      return {
+        schemaVersion: 1,
+        source: String(data.source || "unknown"),
+        updatedAt: data.updatedAt || null,
+        latestRound: draws.reduce((max, draw) => Math.max(max, draw.round), 0),
+        draws: draws.sort((a, b) => b.round - a.round)
+      };
+    }
+
+    function normalizeOfficialDraw(payload) {
+      return normalizeDraw({
+        round: payload.drwNo,
+        date: payload.drwNoDate,
+        numbers: [
+          payload.drwtNo1,
+          payload.drwtNo2,
+          payload.drwtNo3,
+          payload.drwtNo4,
+          payload.drwtNo5,
+          payload.drwtNo6
+        ],
+        bonus: payload.bnusNo,
+        firstPrizeAmount: payload.firstWinamnt,
+        firstWinnerCount: payload.firstPrzwnerCo,
+        totalSellAmount: payload.totSellamnt
+      });
+    }
+
+    async function fetchOfficialDraw(round) {
+      const response = await fetch(`${OFFICIAL_DRAW_API_URL}&drwNo=${round}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`official_draw_http_${response.status}_round_${round}`);
+      const payload = await response.json();
+      if (payload.returnValue !== "success") return null;
+
+      const draw = normalizeOfficialDraw(payload);
+      if (!isValidDraw(draw)) throw new Error(`official_draw_invalid_round_${round}`);
+      return draw;
+    }
+
+    async function mergeOfficialUpdates(data) {
+      const newDraws = [];
+
+      for (let offset = 1; offset <= MAX_OFFICIAL_LOOKAHEAD; offset += 1) {
+        const round = data.latestRound + offset;
+        const draw = await fetchOfficialDraw(round);
+        if (!draw) break;
+        newDraws.push(draw);
+      }
+
+      if (newDraws.length === 0) {
+        return { data, addedCount: 0, officialCheckFailed: false };
+      }
+
+      const drawByRound = new Map([...newDraws, ...data.draws].map((draw) => [draw.round, draw]));
+      const draws = [...drawByRound.values()].sort((a, b) => b.round - a.round);
+
+      return {
+        data: {
+          ...data,
+          source: `${data.source}+official-live`,
+          updatedAt: new Date().toISOString(),
+          latestRound: draws[0].round,
+          draws
+        },
+        addedCount: newDraws.length,
+        officialCheckFailed: false
+      };
+    }
+
+    function getBallClass(number) {
+      if (number <= 10) return "n1";
+      if (number <= 20) return "n2";
+      if (number <= 30) return "n3";
+      if (number <= 40) return "n4";
+      return "n5";
+    }
+
+    function sumNumbers(numbers) {
+      return numbers.reduce((total, number) => total + number, 0);
+    }
+
+    function countOddEven(numbers) {
+      const odd = numbers.filter((number) => number % 2 === 1).length;
+      return { odd, even: numbers.length - odd };
+    }
+
+    function countLowHigh(numbers) {
+      const low = numbers.filter((number) => number <= 22).length;
+      return { low, high: numbers.length - low };
+    }
+
+    function createEmptyFrequency() {
+      return Array.from({ length: 45 }, (_, index) => ({
+        number: index + 1,
+        count: 0,
+        bonusCount: 0
+      }));
+    }
+
+    function calculateStats(draws, limit = draws.length) {
+      const selectedDraws = draws.slice(0, limit);
+      const frequency = createEmptyFrequency();
+      const sums = [];
+      let oddTotal = 0;
+      let evenTotal = 0;
+      let lowTotal = 0;
+      let highTotal = 0;
+
+      selectedDraws.forEach((draw) => {
+        draw.numbers.forEach((number) => {
+          frequency[number - 1].count += 1;
+        });
+        frequency[draw.bonus - 1].bonusCount += 1;
+
+        const oddEven = countOddEven(draw.numbers);
+        const lowHigh = countLowHigh(draw.numbers);
+        oddTotal += oddEven.odd;
+        evenTotal += oddEven.even;
+        lowTotal += lowHigh.low;
+        highTotal += lowHigh.high;
+        sums.push(sumNumbers(draw.numbers));
+      });
+
+      const drawCount = selectedDraws.length || 1;
+      return {
+        drawCount: selectedDraws.length,
+        frequency,
+        hotNumbers: [...frequency].sort((a, b) => b.count - a.count || a.number - b.number).slice(0, 10),
+        coldNumbers: [...frequency].sort((a, b) => a.count - b.count || a.number - b.number).slice(0, 10),
+        averageOdd: oddTotal / drawCount,
+        averageEven: evenTotal / drawCount,
+        averageLow: lowTotal / drawCount,
+        averageHigh: highTotal / drawCount,
+        averageSum: sums.length ? sums.reduce((a, b) => a + b, 0) / sums.length : 0,
+        minSum: sums.length ? Math.min(...sums) : 0,
+        maxSum: sums.length ? Math.max(...sums) : 0
+      };
+    }
+
+    function shuffle(items) {
+      return [...items].sort(() => Math.random() - 0.5);
+    }
+
+    function isBalancedCandidate(numbers) {
+      const oddEven = countOddEven(numbers);
+      const lowHigh = countLowHigh(numbers);
+      const sum = sumNumbers(numbers);
+      const lastDigits = numbers.map((number) => number % 10);
+      const maxSameEnding = Math.max(...lastDigits.map((digit) => lastDigits.filter((item) => item === digit).length));
+      const consecutiveRuns = getConsecutiveRuns(numbers);
+      return oddEven.odd >= 2
+        && oddEven.odd <= 4
+        && lowHigh.low >= 2
+        && lowHigh.low <= 4
+        && sum >= 90
+        && sum <= 180
+        && maxSameEnding <= 2
+        && consecutiveRuns.every((run) => run.length <= 2);
+    }
+
+    function combinationKey(numbers) {
+      return [...numbers].sort((a, b) => a - b).join("-");
+    }
+
+    function createHistoricalCombinationSet(draws) {
+      return new Set(draws.map((draw) => combinationKey(draw.numbers)));
+    }
+
+    function makeRecommendation(stats, historicalCombinations) {
+      const hot = stats.hotNumbers.slice(0, 12).map((item) => item.number);
+      const cold = stats.coldNumbers.slice(0, 12).map((item) => item.number);
+      const middle = stats.frequency
+        .filter((item) => !hot.includes(item.number) && !cold.includes(item.number))
+        .map((item) => item.number);
+
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        const candidate = [
+          ...shuffle(hot).slice(0, 2),
+          ...shuffle(cold).slice(0, 2),
+          ...shuffle(middle).slice(0, 2)
+        ].sort((a, b) => a - b);
+
+        if (
+          new Set(candidate).size === 6
+          && isBalancedCandidate(candidate)
+          && !historicalCombinations.has(combinationKey(candidate))
+        ) {
+          const oddEven = countOddEven(candidate);
+          const lowHigh = countLowHigh(candidate);
+          return {
+            createdAt: new Date().toISOString(),
+            method: "balanced-statistical",
+            numbers: candidate,
+            reason: {
+              oddEven: `${oddEven.odd}:${oddEven.even}`,
+              lowHigh: `${lowHigh.low}:${lowHigh.high}`,
+              sum: sumNumbers(candidate),
+              frequentNumbers: candidate.filter((number) => hot.includes(number)),
+              coldNumbers: candidate.filter((number) => cold.includes(number))
+            }
+          };
+        }
+      }
+
+      let fallback = [];
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        fallback = shuffle(Array.from({ length: 45 }, (_, index) => index + 1))
+          .slice(0, 6)
+          .sort((a, b) => a - b);
+        if (!historicalCombinations.has(combinationKey(fallback))) break;
+      }
+      const oddEven = countOddEven(fallback);
+      const lowHigh = countLowHigh(fallback);
+      return {
+        createdAt: new Date().toISOString(),
+        method: "fallback-random",
+        numbers: fallback,
+        reason: {
+          oddEven: `${oddEven.odd}:${oddEven.even}`,
+          lowHigh: `${lowHigh.low}:${lowHigh.high}`,
+          sum: sumNumbers(fallback),
+          frequentNumbers: [],
+          coldNumbers: []
+        }
+      };
+    }
+
+    function generateRecommendations(state, draws) {
+      const stats = calculateStats(draws, state.preferences.statWindow);
+      const historicalCombinations = createHistoricalCombinationSet(draws);
+      const count = state.preferences.recommendationCount;
+      const keys = new Set();
+      const nextRecommendations = [];
+
+      while (nextRecommendations.length < count && keys.size < 100) {
+        const recommendation = makeRecommendation(stats, historicalCombinations);
+        const key = combinationKey(recommendation.numbers);
+        if (!keys.has(key)) {
+          keys.add(key);
+          nextRecommendations.push(recommendation);
+        }
+      }
+
+      return saveState({
+        ...state,
+        recommendations: [...nextRecommendations, ...state.recommendations].slice(0, 30)
+      });
+    }
+
+    function parseNumberInput(value) {
+      const numbers = value
+        .split(/[,\s]+/)
+        .map((token) => token.trim())
+        .filter(Boolean)
+        .map(Number);
+
+      const unique = [...new Set(numbers)];
+      const invalid = unique.filter((number) => !Number.isInteger(number) || number < 1 || number > 45);
+      if (invalid.length > 0) return { ok: false, error: "번호는 1부터 45 사이여야 합니다.", numbers: [] };
+      if (unique.length === 0) return { ok: false, error: "분석할 번호를 입력하세요.", numbers: [] };
+      return { ok: true, error: "", numbers: unique };
+    }
+
+    function drawMatchesPattern(draw, numbers, mode) {
+      if (mode === "all") return numbers.every((number) => draw.numbers.includes(number));
+      return numbers.some((number) => draw.numbers.includes(number));
+    }
+
+    function analyzeNextDraws(draws, numbers, mode) {
+      const byRound = new Map(draws.map((draw) => [draw.round, draw]));
+      const matchedBaseDraws = draws
+        .filter((draw) => drawMatchesPattern(draw, numbers, mode))
+        .sort((a, b) => a.round - b.round);
+      const nextDraws = matchedBaseDraws
+        .map((draw) => byRound.get(draw.round + 1))
+        .filter(Boolean)
+        .sort((a, b) => b.round - a.round);
+
+      return {
+        inputNumbers: numbers,
+        mode,
+        matchedBaseDraws,
+        nextDraws,
+        stats: calculateStats(nextDraws, nextDraws.length)
+      };
+    }
+
+    function expectedMainNumberCount(drawCount) {
+      return drawCount * (6 / 45);
+    }
+
+    function zScore(observed, expected, probability) {
+      const variance = expected * (1 - probability);
+      if (variance <= 0) return 0;
+      return (observed - expected) / Math.sqrt(variance);
+    }
+
+    function approximateTwoTailedPValue(z) {
+      const x = Math.abs(z);
+      const t = 1 / (1 + 0.2316419 * x);
+      const d = 0.3989423 * Math.exp(-x * x / 2);
+      const probability = d * t * (
+        0.3193815
+        + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))
+      );
+      return Math.min(1, Math.max(0, 2 * probability));
+    }
+
+    function significanceLabel(pValue, sampleCount) {
+      if (sampleCount < 100) return "표본 부족";
+      if (pValue < 0.01) return "강한 편차";
+      if (pValue < 0.05) return "눈에 띄는 편차";
+      return "무작위 범위";
+    }
+
+    function analyzeNumberFrequencySignificance(draws) {
+      const stats = calculateStats(draws, draws.length);
+      const expected = expectedMainNumberCount(stats.drawCount);
+      const probability = 6 / 45;
+
+      return stats.frequency.map((item) => {
+        const z = zScore(item.count, expected, probability);
+        const pValue = approximateTwoTailedPValue(z);
+        return {
+          number: item.number,
+          observed: item.count,
+          expected,
+          z,
+          pValue,
+          label: significanceLabel(pValue, stats.drawCount)
+        };
+      }).sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+    }
+
+    function analyzePairCooccurrence(draws) {
+      const pairCounts = new Map();
+      draws.forEach((draw) => {
+        draw.numbers.forEach((a, index) => {
+          draw.numbers.slice(index + 1).forEach((b) => {
+            const key = `${a}-${b}`;
+            pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+          });
+        });
+      });
+
+      const expected = draws.length * (15 / 990);
+      return [...pairCounts.entries()].map(([key, count]) => {
+        const z = zScore(count, expected, 15 / 990);
+        const pValue = approximateTwoTailedPValue(z);
+        return {
+          pair: key.split("-").map(Number),
+          observed: count,
+          expected,
+          z,
+          pValue,
+          label: significanceLabel(pValue, draws.length)
+        };
+      }).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 10);
+    }
+
+    function analyzeStructuralPatterns(draws) {
+      const consecutiveCount = draws.filter((draw) => (
+        draw.numbers.some((number, index, numbers) => index > 0 && number === numbers[index - 1] + 1)
+      )).length;
+      const sums = draws.map((draw) => sumNumbers(draw.numbers));
+      return {
+        drawCount: draws.length,
+        consecutiveCount,
+        consecutiveRate: draws.length ? consecutiveCount / draws.length : 0,
+        averageSum: sums.length ? sums.reduce((a, b) => a + b, 0) / sums.length : 0,
+        minSum: sums.length ? Math.min(...sums) : 0,
+        maxSum: sums.length ? Math.max(...sums) : 0
+      };
+    }
+
+    function analyzeLastDigitPatterns(draws, recentLimit = 100) {
+      const digitCounts = Array.from({ length: 10 }, (_, digit) => ({
+        digit,
+        count: 0,
+        recentCount: 0,
+        duplicateTwoPlusDraws: 0,
+        duplicateThreePlusDraws: 0
+      }));
+      const recentDraws = draws.slice(0, recentLimit);
+
+      draws.forEach((draw) => {
+        const perDraw = new Map();
+        draw.numbers.forEach((number) => {
+          const digit = number % 10;
+          digitCounts[digit].count += 1;
+          perDraw.set(digit, (perDraw.get(digit) || 0) + 1);
+        });
+        perDraw.forEach((count, digit) => {
+          if (count >= 2) digitCounts[digit].duplicateTwoPlusDraws += 1;
+          if (count >= 3) digitCounts[digit].duplicateThreePlusDraws += 1;
+        });
+      });
+
+      recentDraws.forEach((draw) => {
+        draw.numbers.forEach((number) => {
+          digitCounts[number % 10].recentCount += 1;
+        });
+      });
+
+      return {
+        recentLimit,
+        digits: digitCounts.map((item) => ({
+          ...item,
+          share: draws.length ? item.count / (draws.length * 6) : 0,
+          recentShare: recentDraws.length ? item.recentCount / (recentDraws.length * 6) : 0
+        })),
+        topDigits: [...digitCounts].sort((a, b) => b.count - a.count).slice(0, 5),
+        recentStrongDigits: digitCounts
+          .map((item) => ({
+            digit: item.digit,
+            delta: (recentDraws.length ? item.recentCount / (recentDraws.length * 6) : 0)
+              - (draws.length ? item.count / (draws.length * 6) : 0)
+          }))
+          .sort((a, b) => b.delta - a.delta)
+          .slice(0, 5)
+      };
+    }
+
+    function getConsecutiveRuns(numbers) {
+      const sorted = [...numbers].sort((a, b) => a - b);
+      const runs = [];
+      let current = [sorted[0]];
+
+      for (let index = 1; index < sorted.length; index += 1) {
+        if (sorted[index] === sorted[index - 1] + 1) {
+          current.push(sorted[index]);
+        } else {
+          if (current.length >= 2) runs.push(current);
+          current = [sorted[index]];
+        }
+      }
+      if (current.length >= 2) runs.push(current);
+      return runs;
+    }
+
+    function analyzeConsecutivePatterns(draws, recentLimit = 100) {
+      const pairCounts = new Map();
+      const summary = { twoPlus: 0, threePlus: 0, fourPlus: 0 };
+      const recentDraws = draws.slice(0, recentLimit);
+      let recentTwoPlus = 0;
+
+      draws.forEach((draw) => {
+        const runs = getConsecutiveRuns(draw.numbers);
+        if (runs.some((run) => run.length >= 2)) summary.twoPlus += 1;
+        if (runs.some((run) => run.length >= 3)) summary.threePlus += 1;
+        if (runs.some((run) => run.length >= 4)) summary.fourPlus += 1;
+
+        runs.forEach((run) => {
+          for (let index = 1; index < run.length; index += 1) {
+            const key = `${run[index - 1]}-${run[index]}`;
+            pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+          }
+        });
+      });
+
+      recentDraws.forEach((draw) => {
+        if (getConsecutiveRuns(draw.numbers).some((run) => run.length >= 2)) recentTwoPlus += 1;
+      });
+
+      return {
+        recentLimit,
+        summary,
+        overallTwoPlusRate: draws.length ? summary.twoPlus / draws.length : 0,
+        recentTwoPlusRate: recentDraws.length ? recentTwoPlus / recentDraws.length : 0,
+        topPairs: [...pairCounts.entries()]
+          .map(([key, count]) => ({ pair: key.split("-").map(Number), count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+      };
+    }
+
+    function findStatisticalPatterns(draws) {
+      return {
+        numberFrequency: analyzeNumberFrequencySignificance(draws).slice(0, 12),
+        pairCooccurrence: analyzePairCooccurrence(draws),
+        structural: analyzeStructuralPatterns(draws),
+        lastDigits: analyzeLastDigitPatterns(draws),
+        consecutive: analyzeConsecutivePatterns(draws)
+      };
+    }
+
+    function renderBalls(numbers, bonus = null) {
+      const mainBalls = numbers.map((number) => (
+        `<span class="ball ${getBallClass(number)}">${number}</span>`
+      )).join("");
+      if (!bonus) return `<div class="balls">${mainBalls}</div>`;
+      return `<div class="balls">${mainBalls}<span class="muted">+</span><span class="ball ${getBallClass(bonus)}">${bonus}</span></div>`;
+    }
+
+    function formatCurrency(value) {
+      return new Intl.NumberFormat("ko-KR").format(value || 0);
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "아직 갱신 전";
+      return new Intl.DateTimeFormat("ko-KR", {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }).format(new Date(value));
+    }
+
+    function formatPercent(value) {
+      return `${(value * 100).toFixed(1)}%`;
+    }
+
+    function renderStatus(state, data, loadStatus) {
+      document.querySelector("#statusPanel").innerHTML = `
+        <strong>${loadStatus.title}</strong>
+        <p>${loadStatus.message}</p>
+        <p>데이터 회차: ${data.draws.length}개 · 최신 회차: ${data.latestRound || "-"} · 데이터 갱신: ${formatDateTime(data.updatedAt)}</p>
+      `;
+    }
+
+    function renderLatest(data) {
+      const latest = data.draws[0];
+      document.querySelector("#latestPanel").innerHTML = latest ? `
+        <h2>최근 당첨번호</h2>
+        <p class="muted">${latest.round}회 · ${latest.date || "날짜 없음"}</p>
+        ${renderBalls(latest.numbers, latest.bonus)}
+        <p>1등 ${latest.firstWinnerCount}명 · 1인당 ${formatCurrency(latest.firstPrizeAmount)}원</p>
+      ` : `
+        <h2>최근 당첨번호</h2>
+        <p class="error">아직 읽어온 당첨번호가 없습니다.</p>
+      `;
+    }
+
+    function renderRecommendations(state, data) {
+      const panel = document.querySelector("#recommendPanel");
+      if (data.draws.length === 0) {
+        panel.innerHTML = "<h2>추천 번호</h2><p>데이터를 먼저 불러와야 추천할 수 있습니다.</p>";
+        return;
+      }
+
+      const recommendations = state.recommendations.slice(0, state.preferences.recommendationCount);
+      panel.innerHTML = `
+        <h2>추천 번호</h2>
+        <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 역대 1등 조합과 완전히 같은 번호는 제외합니다.</p>
+        <button id="generateButton" type="button">추천 새로 만들기</button>
+        <div class="recommendation-list" style="margin-top:12px;">
+          ${recommendations.length ? recommendations.map((recommendation) => `
+            <article class="recommendation-card">
+              ${renderBalls(recommendation.numbers)}
+              <p class="muted">홀짝 ${recommendation.reason.oddEven} · 저고 ${recommendation.reason.lowHigh} · 합계 ${recommendation.reason.sum}</p>
+              <p class="muted">자주 나온 번호 ${recommendation.reason.frequentNumbers.join(", ") || "-"} · 덜 나온 번호 ${recommendation.reason.coldNumbers.join(", ") || "-"}</p>
+            </article>
+          `).join("") : "<p>아직 추천 번호가 없습니다.</p>"}
+        </div>
+      `;
+      document.querySelector("#generateButton").addEventListener("click", () => {
+        appState = generateRecommendations(appState, drawData.draws);
+        renderApp(appState, drawData, currentLoadStatus);
+      });
+    }
+
+    function renderMiniBars(items, max, labeler) {
+      return `<div class="mini-bars">${items.map((item) => `
+        <div class="mini-bar">
+          <strong>${labeler(item)}</strong>
+          <div class="bar-track"><div class="bar-fill" style="width:${max ? (item.count / max) * 100 : 0}%"></div></div>
+          <span>${item.count}회</span>
+        </div>
+      `).join("")}</div>`;
+    }
+
+    function renderStats(data) {
+      const stats = calculateStats(data.draws, appState.preferences.statWindow);
+      const hotMax = Math.max(...stats.hotNumbers.map((item) => item.count), 1);
+      const coldMax = Math.max(...stats.coldNumbers.map((item) => item.count), 1);
+      document.querySelector("#statsPanel").innerHTML = `
+        <h2>전체 통계</h2>
+        <p class="muted">최근 ${Math.min(appState.preferences.statWindow, data.draws.length)}개 회차 기준입니다.</p>
+        <div class="grid">
+          <div class="metric"><h3>평균 홀짝</h3><p class="metric-value">${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}</p></div>
+          <div class="metric"><h3>평균 저고</h3><p class="metric-value">${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}</p></div>
+          <div class="metric"><h3>합계 평균</h3><p class="metric-value">${stats.averageSum.toFixed(1)}</p><p class="muted">${stats.minSum}~${stats.maxSum}</p></div>
+        </div>
+        <div class="grid" style="margin-top:12px;">
+          <div class="metric"><h3>자주 나온 번호 TOP 10</h3>${renderMiniBars(stats.hotNumbers, hotMax, (item) => `${item.number}번`)}</div>
+          <div class="metric"><h3>덜 나온 번호 TOP 10</h3>${renderMiniBars(stats.coldNumbers, coldMax, (item) => `${item.number}번`)}</div>
+        </div>
+      `;
+    }
+
+    function renderPatternPanel() {
+      document.querySelector("#patternPanel").innerHTML = `
+        <h2>번호 패턴 다음 회차 분석</h2>
+        <form id="patternForm" class="form-row">
+          <input id="patternNumbers" type="text" placeholder="예: 7, 14, 28" aria-label="분석 번호">
+          <select id="patternMode" aria-label="분석 조건">
+            <option value="any">하나라도 포함</option>
+            <option value="all">모두 포함</option>
+          </select>
+          <button type="submit">분석하기</button>
+        </form>
+        <div id="patternResults" style="margin-top:12px;"></div>
+      `;
+    }
+
+    function renderPatternResults(result) {
+      const target = document.querySelector("#patternResults");
+      const sampleWarning = result.nextDraws.length < 10
+        ? "<p class=\"warning\">표본이 10회 미만이라 해석에 주의하세요.</p>"
+        : "";
+      const hotMax = Math.max(...result.stats.hotNumbers.map((item) => item.count), 1);
+
+      if (result.matchedBaseDraws.length === 0) {
+        target.innerHTML = "<p>조건에 맞는 기준 회차가 없습니다.</p>";
+        return;
+      }
+
+      target.innerHTML = `
+        ${sampleWarning}
+        <div class="grid">
+          <div class="metric"><h3>기준 회차</h3><p class="metric-value">${result.matchedBaseDraws.length}</p></div>
+          <div class="metric"><h3>분석된 다음 회차</h3><p class="metric-value">${result.nextDraws.length}</p></div>
+          <div class="metric"><h3>다음 회차 합계 평균</h3><p class="metric-value">${result.stats.averageSum.toFixed(1)}</p></div>
+        </div>
+        <div class="metric" style="margin-top:12px;">
+          <h3>다음 회차에서 자주 나온 번호</h3>
+          ${result.nextDraws.length ? renderMiniBars(result.stats.hotNumbers, hotMax, (item) => `${item.number}번`) : "<p>최신 회차가 기준이라 다음 회차가 아직 없습니다.</p>"}
+        </div>
+      `;
+    }
+
+    function renderSignificancePanel(data) {
+      const panel = document.querySelector("#significancePanel");
+      if (data.draws.length === 0) {
+        panel.innerHTML = "<h2>패턴 분석</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+        return;
+      }
+      const patterns = findStatisticalPatterns(data.draws);
+      const frequencyMax = Math.max(...patterns.numberFrequency.map((item) => item.observed), 1);
+      const digitMax = Math.max(...patterns.lastDigits.digits.map((item) => item.count), 1);
+
+      panel.innerHTML = `
+        <h2>패턴 분석</h2>
+        <p class="muted">로또 추첨은 독립 무작위 사건으로 보는 것이 맞습니다. 이 탭은 과거 데이터가 무작위 기대값에서 얼마나 벗어났는지 보여주는 탐색 도구이며, 다음 회차 예측이나 당첨 가능성 상승을 의미하지 않습니다.</p>
+        <p class="warning">많은 후보를 동시에 비교하면 우연히 유의해 보이는 결과가 생길 수 있습니다.</p>
+        <div class="grid">
+          <div class="metric">
+            <h3>번호 출현 편차</h3>
+            <div class="mini-bars">${patterns.numberFrequency.map((item) => `
+              <div class="mini-bar">
+                <strong>${item.number}번</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:${(item.observed / frequencyMax) * 100}%"></div></div>
+                <span>${item.observed}회 · ${item.label}</span>
+              </div>
+            `).join("")}</div>
+          </div>
+          <div class="metric">
+            <h3>번호 쌍 동시 출현</h3>
+            ${patterns.pairCooccurrence.length ? patterns.pairCooccurrence.map((item) => `
+              <p>${item.pair.join("-")} · ${item.observed}회 · ${item.label}</p>
+            `).join("") : "<p>표본이 부족합니다.</p>"}
+          </div>
+        </div>
+        <div class="grid" style="margin-top:12px;">
+          <div class="metric">
+            <h3>끝수 패턴</h3>
+            <div class="mini-bars">${patterns.lastDigits.digits.map((item) => `
+              <div class="mini-bar">
+                <strong>${item.digit}끝</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:${(item.count / digitMax) * 100}%"></div></div>
+                <span>${item.count}회 · 2개+ ${item.duplicateTwoPlusDraws}회</span>
+              </div>
+            `).join("")}</div>
+            <p class="muted">최근 강세: ${patterns.lastDigits.recentStrongDigits.map((item) => `${item.digit}끝 ${formatPercent(item.delta)}`).join(", ")}</p>
+          </div>
+          <div class="metric">
+            <h3>연번 패턴</h3>
+            <p>2연번 이상: ${patterns.consecutive.summary.twoPlus}회 (${formatPercent(patterns.consecutive.overallTwoPlusRate)})</p>
+            <p>3연번 이상: ${patterns.consecutive.summary.threePlus}회</p>
+            <p>4연번 이상: ${patterns.consecutive.summary.fourPlus}회</p>
+            <p>최근 ${patterns.consecutive.recentLimit}회 2연번 이상: ${formatPercent(patterns.consecutive.recentTwoPlusRate)}</p>
+            <p class="muted">자주 나온 연번: ${patterns.consecutive.topPairs.map((item) => `${item.pair.join("-")} ${item.count}회`).join(", ") || "-"}</p>
+          </div>
+          <div class="metric">
+            <h3>합계 구조</h3>
+            <p>합계 평균 ${patterns.structural.averageSum.toFixed(1)}</p>
+            <p>합계 범위 ${patterns.structural.minSum}~${patterns.structural.maxSum}</p>
+            <p>연번 포함률 ${formatPercent(patterns.structural.consecutiveRate)}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHistory(state, data) {
+      const query = String(state.preferences.historyQuery || "").trim();
+      const limit = Number(state.preferences.historyLimit || 50);
+      const filtered = data.draws
+        .filter((draw) => !query || String(draw.round).includes(query) || draw.date.includes(query))
+        .slice(0, limit);
+
+      document.querySelector("#historyPanel").innerHTML = `
+        <h2>역대 당첨번호</h2>
+        <div class="form-row" style="margin-bottom:12px;">
+          <input id="historyQuery" type="search" placeholder="회차 또는 날짜 검색" value="${query}">
+          <select id="historyLimit" aria-label="표시 개수">
+            ${[20, 50, 100, 300, 1000].map((value) => `<option value="${value}" ${value === limit ? "selected" : ""}>${value}개</option>`).join("")}
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>회차</th><th>날짜</th><th>번호</th><th>보너스</th><th>1등</th><th>1등 당첨금</th></tr></thead>
+            <tbody>
+              ${filtered.map((draw) => `
+                <tr>
+                  <td>${draw.round}</td>
+                  <td>${draw.date || "-"}</td>
+                  <td>${renderBalls(draw.numbers)}</td>
+                  <td>${draw.bonus}</td>
+                  <td>${draw.firstWinnerCount}명</td>
+                  <td>${formatCurrency(draw.firstPrizeAmount)}원</td>
+                </tr>
+              `).join("") || "<tr><td colspan=\"6\">표시할 회차가 없습니다.</td></tr>"}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      document.querySelector("#historyQuery").addEventListener("input", (event) => {
+        appState = saveState({
+          ...appState,
+          preferences: { ...appState.preferences, historyQuery: event.target.value }
+        });
+        renderHistory(appState, drawData);
+      });
+      document.querySelector("#historyLimit").addEventListener("change", (event) => {
+        appState = saveState({
+          ...appState,
+          preferences: { ...appState.preferences, historyLimit: Number(event.target.value) }
+        });
+        renderHistory(appState, drawData);
+      });
+    }
+
+    function renderApp(state, data, loadStatus) {
+      currentLoadStatus = loadStatus;
+      renderStatus(state, data, loadStatus);
+      renderLatest(data);
+      renderRecommendations(state, data);
+      renderStats(data);
+      renderPatternPanel();
+      renderSignificancePanel(data);
+      renderHistory(state, data);
+    }
+
+    async function loadAppData() {
+      const button = document.querySelector("#refreshButton");
+      button.disabled = true;
+      renderApp(appState, drawData, { title: "데이터 로딩 중", message: "lotto-data.json을 읽고 있습니다." });
+
+      try {
+        drawData = await loadDrawData();
+        let addedCount = 0;
+        let officialCheckFailed = false;
+
+        try {
+          const result = await mergeOfficialUpdates(drawData);
+          drawData = result.data;
+          addedCount = result.addedCount;
+          officialCheckFailed = result.officialCheckFailed;
+        } catch (officialError) {
+          officialCheckFailed = true;
+          console.warn("official_update_check_failed", officialError);
+        }
+
+        if (drawData.draws.length > 0 && appState.recommendations.length === 0) {
+          appState = generateRecommendations(appState, drawData.draws);
+        }
+        renderApp(appState, drawData, {
+          title: "데이터 로드 완료",
+          message: officialCheckFailed
+            ? `${drawData.draws.length}개 회차를 불러왔습니다. 공식 최신 회차 확인은 브라우저에서 차단되었거나 실패했습니다.`
+            : `${drawData.draws.length}개 회차를 불러왔습니다.${addedCount > 0 ? ` 공식 API에서 새 회차 ${addedCount}개를 추가로 반영했습니다.` : " 저장된 데이터가 최신입니다."}`
+        });
+      } catch (error) {
+        console.warn("data_load_failed", error);
+        renderApp(appState, drawData, {
+          title: "데이터 로드 실패",
+          message: "lotto-data.json을 읽지 못했습니다. 파일이 있는지 확인하고, 필요하면 이 폴더를 로컬 서버로 열어주세요."
+        });
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.querySelector("#refreshButton").addEventListener("click", loadAppData);
+
+    document.querySelectorAll(".tab-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
+        document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+        button.classList.add("active");
+        document.querySelector(`#${button.dataset.view}View`).classList.add("active");
+      });
+    });
+
+    document.addEventListener("submit", (event) => {
+      if (event.target.id !== "patternForm") return;
+      event.preventDefault();
+      const input = document.querySelector("#patternNumbers").value;
+      const mode = document.querySelector("#patternMode").value;
+      const parsed = parseNumberInput(input);
+      if (!parsed.ok) {
+        document.querySelector("#patternResults").innerHTML = `<p class="error">${parsed.error}</p>`;
+        return;
+      }
+      const result = analyzeNextDraws(drawData.draws, parsed.numbers, mode);
+      renderPatternResults(result);
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      renderApp(appState, drawData, currentLoadStatus);
+      loadAppData();
+    });
+  </script>
+</body>
+</html>
