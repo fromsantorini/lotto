@@ -6,6 +6,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataPath = resolve(root, "lotto-data.json");
 const OFFICIAL_DRAW_API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber";
 const MAX_BACKFILL_ROUNDS = 20;
+const REQUEST_RETRY_COUNT = 3;
+const REQUEST_RETRY_DELAY_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
 
 function normalizeNumbers(numbers) {
   return numbers.map(Number).sort((a, b) => a - b);
@@ -47,16 +53,47 @@ function readCurrentData() {
 
 async function fetchOfficialDraw(round) {
   const url = `${OFFICIAL_DRAW_API_URL}&drwNo=${round}`;
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "Mozilla/5.0 lotto-dashboard-data-updater"
-    }
-  });
-  if (!response.ok) throw new Error(`official_draw_http_${response.status}_round_${round}`);
+  let lastError = null;
 
-  const payload = await response.json();
+  for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          accept: "application/json,text/plain,*/*",
+          "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+          referer: "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+        }
+      });
+      const body = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`official_draw_http_${response.status}_round_${round}_${body.slice(0, 120)}`);
+      }
+
+      const payload = JSON.parse(body);
+      if (payload.returnValue !== "success") {
+        return null;
+      }
+
+      return validateOfficialPayload(payload, round);
+    } catch (error) {
+      lastError = error;
+      console.warn(`official_draw_fetch_attempt_failed round=${round} attempt=${attempt} message=${error.message}`);
+      if (attempt < REQUEST_RETRY_COUNT) await sleep(REQUEST_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw lastError;
+}
+
+function validateOfficialPayload(payload, requestedRound) {
   if (payload.returnValue !== "success") {
     return null;
+  }
+
+  if (Number(payload.drwNo) !== requestedRound) {
+    throw new Error(`official_draw_round_mismatch_requested_${requestedRound}_received_${payload.drwNo}`);
   }
 
   return validateDraw({
@@ -90,6 +127,8 @@ async function findNewDraws(currentLatestRound) {
 }
 
 const current = readCurrentData();
+console.log(`Current latestRound=${current.latestRound}`);
+
 const newDraws = await findNewDraws(current.latestRound);
 
 if (newDraws.length === 0) {
