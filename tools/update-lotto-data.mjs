@@ -102,13 +102,16 @@ function parseOfficialResultPage(html, requestedRound) {
 
   const roundMatch = firstMatch(html, [
     /"ltEpsd"\s*:\s*"?(\d+)"?/,
+    /(?:name|id)=["']ltEpsd["'][^>]*value=["'](\d+)["']/i,
+    /value=["'](\d+)["'][^>]*(?:name|id)=["']ltEpsd["']/i,
+    /ltEpsd[^0-9]{0,80}(\d{3,5})/i,
     /<h4>\s*<strong>\s*(\d+)\s*회\s*<\/strong>\s*당첨결과\s*<\/h4>/,
     /(\d+)\s*회\s*당첨결과/
   ]);
-  if (!roundMatch) {
+  if (!roundMatch && !requestedRound) {
     throw new Error(`official_result_round_parse_failed_${stripTags(html).slice(0, 160)}`);
   }
-  const round = Number(roundMatch[1]);
+  const round = roundMatch ? Number(roundMatch[1]) : requestedRound;
 
   if (requestedRound && round !== requestedRound) {
     throw new Error(`official_result_round_mismatch_requested_${requestedRound}_received_${round}`);
@@ -116,18 +119,29 @@ function parseOfficialResultPage(html, requestedRound) {
 
   const date = parseResultDate(html);
 
-  const embeddedNumberMatches = [
+  const quotedEmbeddedNumberMatches = [
     ...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g),
     ...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)
   ].map((match) => Number(match[1]));
+  const looseEmbeddedNumberMatches = [
+    ...html.matchAll(/\btm[1-6]WnNo\b[^0-9]{0,40}(\d{1,2})/g),
+    ...html.matchAll(/\bbnsWnNo\b[^0-9]{0,40}(\d{1,2})/g)
+  ].map((match) => Number(match[1]));
 
-  const markupNumberMatches = [...html.matchAll(/<span[^>]*class="[^"]*ball_645[^"]*"[^>]*>\s*(\d{1,2})\s*<\/span>/g)]
+  const markupNumberMatches = [
+    ...html.matchAll(/<span[^>]*class=["'][^"']*ball_645[^"']*["'][^>]*>\s*(\d{1,2})\s*<\/span>/g),
+    ...html.matchAll(/<[^>]*class=["'][^"']*(?:ball|number|num|win)[^"']*["'][^>]*>\s*(\d{1,2})\s*<\/[^>]+>/g)
+  ]
     .map((match) => Number(match[1]))
     .filter((number) => number >= 1 && number <= 45);
-  const ballMatches = embeddedNumberMatches.length >= 7 ? embeddedNumberMatches : markupNumberMatches;
+  const ballMatches = quotedEmbeddedNumberMatches.length >= 7
+    ? quotedEmbeddedNumberMatches
+    : looseEmbeddedNumberMatches.length >= 7
+      ? looseEmbeddedNumberMatches
+      : markupNumberMatches;
 
   if (ballMatches.length < 7) {
-    throw new Error(`official_result_numbers_parse_failed_round_${round}_${stripTags(html).slice(0, 160)}`);
+    throw new Error(`official_result_numbers_parse_failed_round_${round}_quoted=${quotedEmbeddedNumberMatches.length}_loose=${looseEmbeddedNumberMatches.length}_markup=${markupNumberMatches.length}_${stripTags(html).slice(0, 160)}`);
   }
 
   const firstPrizeMatch = firstMatch(html, [
