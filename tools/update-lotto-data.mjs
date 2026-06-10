@@ -4,10 +4,9 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataPath = resolve(root, "lotto-data.json");
-const OFFICIAL_DRAW_API_URLS = [
-  "https://www.dhlottery.co.kr/common.do?method=getLottoNumber",
-  "https://dhlottery.co.kr/common.do?method=getLottoNumber",
-  "https://www.nlotto.co.kr/common.do?method=getLottoNumber"
+const OFFICIAL_RESULT_PAGE_URLS = [
+  "https://www.dhlottery.co.kr/lt645/result",
+  "https://dhlottery.co.kr/lt645/result"
 ];
 const MAX_BACKFILL_ROUNDS = 20;
 const REQUEST_RETRY_COUNT = 3;
@@ -55,42 +54,142 @@ function readCurrentData() {
   };
 }
 
+function decodeHtml(value) {
+  return String(value || "")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripTags(value) {
+  return decodeHtml(String(value || "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function toMoneyNumber(value) {
+  return Number(String(value || "").replace(/[^\d]/g, "")) || 0;
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
+function parseResultDate(html) {
+  const ymdMatch = html.match(/"ltRflYmd"\s*:\s*"?(\d{8})"?/);
+  if (ymdMatch) {
+    return `${ymdMatch[1].slice(0, 4)}-${ymdMatch[1].slice(4, 6)}-${ymdMatch[1].slice(6, 8)}`;
+  }
+
+  const koreanDateMatch = html.match(/\(?\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*추첨\s*\)?/);
+  if (koreanDateMatch) {
+    return `${koreanDateMatch[1]}-${koreanDateMatch[2].padStart(2, "0")}-${koreanDateMatch[3].padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
+function parseOfficialResultPage(html, requestedRound) {
+  if (!html.includes("lt645") && !html.includes("당첨결과") && !html.includes("win_result") && !html.includes("ltEpsd")) {
+    throw new Error(`official_result_page_unexpected_html_${stripTags(html).slice(0, 160)}`);
+  }
+
+  const roundMatch = firstMatch(html, [
+    /"ltEpsd"\s*:\s*"?(\d+)"?/,
+    /<h4>\s*<strong>\s*(\d+)\s*회\s*<\/strong>\s*당첨결과\s*<\/h4>/,
+    /(\d+)\s*회\s*당첨결과/
+  ]);
+  if (!roundMatch) {
+    throw new Error(`official_result_round_parse_failed_${stripTags(html).slice(0, 160)}`);
+  }
+  const round = Number(roundMatch[1]);
+
+  if (requestedRound && round !== requestedRound) {
+    throw new Error(`official_result_round_mismatch_requested_${requestedRound}_received_${round}`);
+  }
+
+  const date = parseResultDate(html);
+
+  const embeddedNumberMatches = [
+    ...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g),
+    ...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)
+  ].map((match) => Number(match[1]));
+
+  const markupNumberMatches = [...html.matchAll(/<span[^>]*class="[^"]*ball_645[^"]*"[^>]*>\s*(\d{1,2})\s*<\/span>/g)]
+    .map((match) => Number(match[1]))
+    .filter((number) => number >= 1 && number <= 45);
+  const ballMatches = embeddedNumberMatches.length >= 7 ? embeddedNumberMatches : markupNumberMatches;
+
+  if (ballMatches.length < 7) {
+    throw new Error(`official_result_numbers_parse_failed_round_${round}_${stripTags(html).slice(0, 160)}`);
+  }
+
+  const firstPrizeMatch = firstMatch(html, [
+    /"rnk1WnAmt"\s*:\s*"?([\d,]+)"?/,
+    /rnk1WnAmt\s*[:=]\s*"?([\d,]+)"?/
+  ]);
+  const firstWinnerMatch = firstMatch(html, [
+    /"rnk1WnNope"\s*:\s*"?([\d,]+)"?/,
+    /rnk1WnNope\s*[:=]\s*"?([\d,]+)"?/
+  ]);
+
+  const prizeRows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    .map((match) => match[1])
+    .map((rowHtml) => [...rowHtml.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map((cell) => stripTags(cell[1])))
+    .filter((cells) => cells.length > 0);
+
+  const firstPrizeRow = prizeRows.find((cells) => cells.some((cell) => cell === "1등" || cell.startsWith("1등 ")));
+  const firstPrizeAmount = firstPrizeMatch ? toMoneyNumber(firstPrizeMatch[1]) : firstPrizeRow ? toMoneyNumber(firstPrizeRow[2] || firstPrizeRow[1]) : 0;
+  const firstWinnerCount = firstWinnerMatch ? toMoneyNumber(firstWinnerMatch[1]) : firstPrizeRow ? toMoneyNumber(firstPrizeRow[3] || firstPrizeRow[2]) : 0;
+
+  return validateDraw({
+    round,
+    date,
+    numbers: ballMatches.slice(0, 6),
+    bonus: ballMatches[6],
+    firstPrizeAmount,
+    firstWinnerCount,
+    totalSellAmount: 0
+  });
+}
+
 async function fetchOfficialDraw(round) {
   let lastError = null;
 
-  for (const baseUrl of OFFICIAL_DRAW_API_URLS) {
-    const url = `${baseUrl}&drwNo=${round}`;
+  for (const baseUrl of OFFICIAL_RESULT_PAGE_URLS) {
+    const url = `${baseUrl}?ltEpsd=${round}`;
 
     for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
       try {
         const response = await fetch(url, {
           headers: {
-            accept: "application/json,text/plain,*/*",
+            accept: "text/html,*/*",
             "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-            referer: "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+            referer: "https://www.dhlottery.co.kr/lt645/result",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
           }
         });
         const body = await response.text();
 
         if (!response.ok) {
-          throw new Error(`official_draw_http_${response.status}_url_${baseUrl}_round_${round}_${body.slice(0, 120)}`);
+          throw new Error(`official_result_http_${response.status}_url_${baseUrl}_${stripTags(body).slice(0, 120)}`);
         }
 
         const trimmedBody = body.trim();
-        if (!trimmedBody.startsWith("{")) {
-          throw new Error(`official_draw_non_json_url_${baseUrl}_round_${round}_${trimmedBody.slice(0, 180).replace(/\s+/g, " ")}`);
-        }
-
-        const payload = JSON.parse(trimmedBody);
-        if (payload.returnValue !== "success") {
+        if (trimmedBody.includes("조회된 결과가 없습니다") || trimmedBody.includes("검색된 결과가 없습니다")) {
           return null;
         }
 
-        return validateOfficialPayload(payload, round);
+        return parseOfficialResultPage(trimmedBody, round);
       } catch (error) {
         lastError = error;
-        console.warn(`official_draw_fetch_attempt_failed round=${round} url=${baseUrl} attempt=${attempt} message=${error.message}`);
+        console.warn(`official_result_fetch_attempt_failed round=${round} url=${baseUrl} attempt=${attempt} message=${error.message}`);
         if (attempt < REQUEST_RETRY_COUNT) await sleep(REQUEST_RETRY_DELAY_MS * attempt);
       }
     }
@@ -99,35 +198,9 @@ async function fetchOfficialDraw(round) {
   throw lastError;
 }
 
-function validateOfficialPayload(payload, requestedRound) {
-  if (payload.returnValue !== "success") {
-    return null;
-  }
-
-  if (Number(payload.drwNo) !== requestedRound) {
-    throw new Error(`official_draw_round_mismatch_requested_${requestedRound}_received_${payload.drwNo}`);
-  }
-
-  return validateDraw({
-    round: payload.drwNo,
-    date: payload.drwNoDate,
-    numbers: [
-      payload.drwtNo1,
-      payload.drwtNo2,
-      payload.drwtNo3,
-      payload.drwtNo4,
-      payload.drwtNo5,
-      payload.drwtNo6
-    ],
-    bonus: payload.bnusNo,
-    firstPrizeAmount: payload.firstWinamnt,
-    firstWinnerCount: payload.firstPrzwnerCo,
-    totalSellAmount: payload.totSellamnt
-  });
-}
-
 async function findNewDraws(currentLatestRound) {
   const newDraws = [];
+
   for (let offset = 1; offset <= MAX_BACKFILL_ROUNDS; offset += 1) {
     const round = currentLatestRound + offset;
     const draw = await fetchOfficialDraw(round);
