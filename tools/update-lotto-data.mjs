@@ -113,14 +113,17 @@ function parseOfficialResultPage(html, requestedRound) {
 
   const date = parseResultDate(html);
 
-  const quotedEmbeddedNumberMatches = [
-    ...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g),
-    ...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)
-  ].map((match) => Number(match[1]));
-  const looseEmbeddedNumberMatches = [
-    ...html.matchAll(/\btm[1-6]WnNo\b[^0-9]{0,40}(\d{1,2})/g),
-    ...html.matchAll(/\bbnsWnNo\b[^0-9]{0,40}(\d{1,2})/g)
-  ].map((match) => Number(match[1]));
+  const quotedMainNumberMatches = [...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g)]
+    .map((match) => Number(match[1]));
+  const quotedBonusNumberMatches = [...html.matchAll(/"(?:bnsWnNo|bnusNo|bnsNo|bonusNo)"\s*:\s*"?(\d{1,2})"?/g)]
+    .map((match) => Number(match[1]));
+  const quotedEmbeddedNumberMatches = [...quotedMainNumberMatches, ...quotedBonusNumberMatches];
+
+  const looseMainNumberMatches = [...html.matchAll(/\btm[1-6]WnNo\b[^0-9]{0,40}(\d{1,2})/g)]
+    .map((match) => Number(match[1]));
+  const looseBonusNumberMatches = [...html.matchAll(/\b(?:bnsWnNo|bnusNo|bnsNo|bonusNo)\b[^0-9]{0,40}(\d{1,2})/g)]
+    .map((match) => Number(match[1]));
+  const looseEmbeddedNumberMatches = [...looseMainNumberMatches, ...looseBonusNumberMatches];
 
   const markupNumberMatches = [
     ...html.matchAll(/<span[^>]*class=["'][^"']*ball_645[^"']*["'][^>]*>\s*(\d{1,2})\s*<\/span>/g),
@@ -135,7 +138,9 @@ function parseOfficialResultPage(html, requestedRound) {
       : markupNumberMatches;
 
   if (ballMatches.length < 7) {
-    throw new Error(`official_result_numbers_parse_failed_round_${round}_quoted=${quotedEmbeddedNumberMatches.length}_loose=${looseEmbeddedNumberMatches.length}_markup=${markupNumberMatches.length}_${stripTags(html).slice(0, 160)}`);
+    const bonusHintMatch = html.match(/(?:bns|bnus|bonus)[\s\S]{0,160}/i);
+    const bonusHint = bonusHintMatch ? stripTags(bonusHintMatch[0]).slice(0, 160) : "no_bonus_hint";
+    throw new Error(`official_result_numbers_parse_failed_round_${round}_quoted=${quotedEmbeddedNumberMatches.length}_quotedMain=${quotedMainNumberMatches.length}_quotedBonus=${quotedBonusNumberMatches.length}_loose=${looseEmbeddedNumberMatches.length}_looseMain=${looseMainNumberMatches.length}_looseBonus=${looseBonusNumberMatches.length}_markup=${markupNumberMatches.length}_${bonusHint}`);
   }
 
   const firstPrizeMatch = firstMatch(html, [
