@@ -25,6 +25,11 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Diagnose official lotto API
+        run: |
+          node --version
+          node -e "fetch('https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo=1227',{headers:{accept:'application/json,text/plain,*/*','accept-language':'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',referer:'https://www.dhlottery.co.kr/gameResult.do?method=byWin','user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36'}}).then(async r=>{const body=await r.text(); console.log('status=' + r.status); console.log('content-type=' + r.headers.get('content-type')); console.log(body.trim().slice(0,500)); if(!r.ok || !body.trim().startsWith('{')) process.exit(1);}).catch(e=>{console.error(e); process.exit(1);})"
+
       - name: Update lotto data
         run: node tools/update-lotto-data.mjs
 

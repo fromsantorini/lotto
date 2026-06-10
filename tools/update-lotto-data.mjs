@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataPath = resolve(root, "lotto-data.json");
-const OFFICIAL_DRAW_API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber";
+const OFFICIAL_DRAW_API_URLS = [
+  "https://www.dhlottery.co.kr/common.do?method=getLottoNumber",
+  "https://dhlottery.co.kr/common.do?method=getLottoNumber",
+  "https://www.nlotto.co.kr/common.do?method=getLottoNumber"
+];
 const MAX_BACKFILL_ROUNDS = 20;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 1000;
@@ -52,35 +56,43 @@ function readCurrentData() {
 }
 
 async function fetchOfficialDraw(round) {
-  const url = `${OFFICIAL_DRAW_API_URL}&drwNo=${round}`;
   let lastError = null;
 
-  for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          accept: "application/json,text/plain,*/*",
-          "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-          referer: "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
-          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+  for (const baseUrl of OFFICIAL_DRAW_API_URLS) {
+    const url = `${baseUrl}&drwNo=${round}`;
+
+    for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            accept: "application/json,text/plain,*/*",
+            "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            referer: "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+          }
+        });
+        const body = await response.text();
+
+        if (!response.ok) {
+          throw new Error(`official_draw_http_${response.status}_url_${baseUrl}_round_${round}_${body.slice(0, 120)}`);
         }
-      });
-      const body = await response.text();
 
-      if (!response.ok) {
-        throw new Error(`official_draw_http_${response.status}_round_${round}_${body.slice(0, 120)}`);
+        const trimmedBody = body.trim();
+        if (!trimmedBody.startsWith("{")) {
+          throw new Error(`official_draw_non_json_url_${baseUrl}_round_${round}_${trimmedBody.slice(0, 180).replace(/\s+/g, " ")}`);
+        }
+
+        const payload = JSON.parse(trimmedBody);
+        if (payload.returnValue !== "success") {
+          return null;
+        }
+
+        return validateOfficialPayload(payload, round);
+      } catch (error) {
+        lastError = error;
+        console.warn(`official_draw_fetch_attempt_failed round=${round} url=${baseUrl} attempt=${attempt} message=${error.message}`);
+        if (attempt < REQUEST_RETRY_COUNT) await sleep(REQUEST_RETRY_DELAY_MS * attempt);
       }
-
-      const payload = JSON.parse(body);
-      if (payload.returnValue !== "success") {
-        return null;
-      }
-
-      return validateOfficialPayload(payload, round);
-    } catch (error) {
-      lastError = error;
-      console.warn(`official_draw_fetch_attempt_failed round=${round} attempt=${attempt} message=${error.message}`);
-      if (attempt < REQUEST_RETRY_COUNT) await sleep(REQUEST_RETRY_DELAY_MS * attempt);
     }
   }
 
