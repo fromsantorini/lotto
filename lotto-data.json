@@ -1,9 +1,329 @@
 {
   "schemaVersion": 1,
-  "source": "data/lotto-history.csv",
-  "updatedAt": "2026-06-04T03:17:39.359Z",
-  "latestRound": 1226,
+  "source": "incremental-official-lt645-result",
+  "updatedAt": "2026-06-10T09:41:02.326Z",
+  "latestRound": 1246,
   "draws": [
+    {
+      "round": 1246,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1245,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1244,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1243,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1242,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1241,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1240,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1239,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1238,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1237,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1236,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1235,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1234,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1233,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1232,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1231,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1230,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1229,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1228,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
+    {
+      "round": 1227,
+      "date": "",
+      "numbers": [
+        10,
+        12,
+        13,
+        24,
+        39,
+        40
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 0,
+      "firstWinnerCount": 0,
+      "totalSellAmount": 0
+    },
     {
       "round": 1226,
       "date": "2026-05-30",
