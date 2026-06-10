@@ -10,7 +10,6 @@ const OFFICIAL_RESULT_PAGE_URLS = [
 const MAX_BACKFILL_ROUNDS = 20;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 1000;
-const DEBUG = process.env.DEBUG_LOTTO === "1";
 
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -73,38 +72,6 @@ function toMoneyNumber(value) {
   return Number(String(value || "").replace(/[^\d]/g, "")) || 0;
 }
 
-function snippetAround(text, pattern, radius = 240) {
-  const index = typeof pattern === "string" ? text.indexOf(pattern) : text.search(pattern);
-  if (index < 0) return "";
-  return text.slice(Math.max(0, index - radius), Math.min(text.length, index + radius));
-}
-
-function debugLog(label, value, maxLength = 1200) {
-  if (!DEBUG) return;
-  const text = String(value || "");
-  console.log(`[debug:${label}]`);
-  console.log(text.slice(0, maxLength));
-}
-
-function debugResultPage(html, url, round) {
-  if (!DEBUG) return;
-
-  debugLog("requested", `round=${round}\nurl=${url}`, 500);
-  debugLog("html_head", html.trim().slice(0, 1200), 1200);
-  debugLog("ltEpsd_context", snippetAround(html, "ltEpsd"), 1200);
-  debugLog("tm1_context", snippetAround(html, "tm1WnNo"), 1200);
-  debugLog("bns_context", snippetAround(html, /bns|bnus|bonus/i), 1200);
-  debugLog("ajax_context", snippetAround(html, /url\s*:|fetch\(|getJSON|\$\.get/i), 1200);
-}
-
-function firstMatch(text, patterns) {
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) return match;
-  }
-  return null;
-}
-
 function parseResultDate(html) {
   const ymdMatch = html.match(/"ltRflYmd"\s*:\s*"?(\d{8})"?/);
   if (ymdMatch) {
@@ -119,104 +86,41 @@ function parseResultDate(html) {
   return "";
 }
 
-function parseOfficialResultPage(html, requestedRound) {
-  if (!html.includes("lt645") && !html.includes("당첨결과") && !html.includes("win_result") && !html.includes("ltEpsd")) {
-    throw new Error(`official_result_page_unexpected_html_${stripTags(html).slice(0, 160)}`);
+function parseOfficialResultPayload(html, round) {
+  const roundMatch = html.match(/"ltEpsd"\s*:\s*"?(\d+)"?/);
+  if (!roundMatch) {
+    throw new Error(`official_result_round_parse_failed_round_${round}`);
+  }
+  const actualRound = Number(roundMatch[1]);
+  if (actualRound !== round) {
+    return { notAvailable: true, actualRound };
   }
 
-  const roundMatch = firstMatch(html, [
-    /"ltEpsd"\s*:\s*"?(\d+)"?/,
-    /(?:name|id)=["']ltEpsd["'][^>]*value=["'](\d+)["']/i,
-    /value=["'](\d+)["'][^>]*(?:name|id)=["']ltEpsd["']/i,
-    /<h4>\s*<strong>\s*(\d+)\s*회\s*<\/strong>\s*당첨결과\s*<\/h4>/,
-    /(\d+)\s*회\s*당첨결과/
-  ]);
-  if (!roundMatch && !requestedRound) {
-    throw new Error(`official_result_round_parse_failed_${stripTags(html).slice(0, 160)}`);
-  }
-  const round = requestedRound || Number(roundMatch[1]);
-
-  const date = parseResultDate(html);
-
-  const quotedMainNumberMatches = [...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g)]
+  const mainNumbers = [...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g)]
     .map((match) => Number(match[1]));
-  const quotedBonusNumberMatches = [...html.matchAll(/"(?:bnsWnNo|bnusNo|bnsNo|bonusNo)"\s*:\s*"?(\d{1,2})"?/g)]
+  const bonusNumbers = [...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)]
     .map((match) => Number(match[1]));
-  const quotedEmbeddedNumberMatches = [...quotedMainNumberMatches, ...quotedBonusNumberMatches];
 
-  const looseMainNumberMatches = [...html.matchAll(/\btm[1-6]WnNo\b\s*[:=]\s*["']?(\d{1,2})["']?/g)]
-    .map((match) => Number(match[1]));
-  const looseBonusNumberMatches = [...html.matchAll(/\b(?:bnsWnNo|bnusNo|bnsNo|bonusNo)\b\s*[:=]\s*["']?(\d{1,2})["']?/g)]
-    .map((match) => Number(match[1]));
-  const looseEmbeddedNumberMatches = [...looseMainNumberMatches, ...looseBonusNumberMatches];
-
-  const markupNumberMatches = [
-    ...html.matchAll(/<span[^>]*class=["'][^"']*ball_645[^"']*["'][^>]*>\s*(\d{1,2})\s*<\/span>/g),
-    ...html.matchAll(/<[^>]*class=["'][^"']*(?:ball|number|num|win)[^"']*["'][^>]*>\s*(\d{1,2})\s*<\/[^>]+>/g)
-  ]
-    .map((match) => Number(match[1]))
-    .filter((number) => number >= 1 && number <= 45);
-  const ballMatches = quotedEmbeddedNumberMatches.length >= 7
-    ? quotedEmbeddedNumberMatches
-    : looseEmbeddedNumberMatches.length >= 7
-      ? looseEmbeddedNumberMatches
-      : markupNumberMatches;
-
-  if (ballMatches.length < 7) {
-    const bonusHintMatch = html.match(/(?:bns|bnus|bonus)[\s\S]{0,160}/i);
-    const bonusHint = bonusHintMatch ? stripTags(bonusHintMatch[0]).slice(0, 160) : "no_bonus_hint";
-    throw new Error(`official_result_numbers_parse_failed_round_${round}_quoted=${quotedEmbeddedNumberMatches.length}_quotedMain=${quotedMainNumberMatches.length}_quotedBonus=${quotedBonusNumberMatches.length}_loose=${looseEmbeddedNumberMatches.length}_looseMain=${looseMainNumberMatches.length}_looseBonus=${looseBonusNumberMatches.length}_markup=${markupNumberMatches.length}_${bonusHint}`);
+  if (mainNumbers.length !== 6 || bonusNumbers.length < 1) {
+    throw new Error(`official_result_payload_parse_failed_round_${round}_main=${mainNumbers.length}_bonus=${bonusNumbers.length}`);
   }
 
-  const firstPrizeMatch = firstMatch(html, [
-    /"rnk1WnAmt"\s*:\s*"?([\d,]+)"?/,
-    /rnk1WnAmt\s*[:=]\s*"?([\d,]+)"?/
-  ]);
-  const firstWinnerMatch = firstMatch(html, [
-    /"rnk1WnNope"\s*:\s*"?([\d,]+)"?/,
-    /rnk1WnNope\s*[:=]\s*"?([\d,]+)"?/
-  ]);
+  const firstPrizeMatch = html.match(/"rnk1WnAmt"\s*:\s*"?([\d,]+)"?/);
+  const firstWinnerMatch = html.match(/"rnk1WnNope"\s*:\s*"?([\d,]+)"?/);
+  const firstPrizeAmount = firstPrizeMatch ? toMoneyNumber(firstPrizeMatch[1]) : 0;
+  const firstWinnerCount = firstWinnerMatch ? toMoneyNumber(firstWinnerMatch[1]) : 0;
 
-  const prizeRows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
-    .map((match) => match[1])
-    .map((rowHtml) => [...rowHtml.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map((cell) => stripTags(cell[1])))
-    .filter((cells) => cells.length > 0);
-
-  const firstPrizeRow = prizeRows.find((cells) => cells.some((cell) => cell === "1등" || cell.startsWith("1등 ")));
-  const firstPrizeAmount = firstPrizeMatch ? toMoneyNumber(firstPrizeMatch[1]) : firstPrizeRow ? toMoneyNumber(firstPrizeRow[2] || firstPrizeRow[1]) : 0;
-  const firstWinnerCount = firstWinnerMatch ? toMoneyNumber(firstWinnerMatch[1]) : firstPrizeRow ? toMoneyNumber(firstPrizeRow[3] || firstPrizeRow[2]) : 0;
-
-  return validateDraw({
-    round,
-    date,
-    numbers: ballMatches.slice(0, 6),
-    bonus: ballMatches[6],
+  return {
+    draw: validateDraw({
+    round: actualRound,
+    date: parseResultDate(html),
+    numbers: mainNumbers,
+    bonus: bonusNumbers[0],
     firstPrizeAmount,
     firstWinnerCount,
     totalSellAmount: 0
-  });
-}
-
-function findResultDataUrls(html, pageUrl, round) {
-  const urlMatches = [
-    ...html.matchAll(/\burl\s*:\s*["']([^"']+)["']/g),
-    ...html.matchAll(/\burl\s*=\s*["']([^"']+)["']/g),
-    ...html.matchAll(/\b(?:fetch|\$\.get|\$\.getJSON)\(\s*["']([^"']+)["']/g),
-    ...html.matchAll(/<a[^>]+href=["']([^"']+)["']/g)
-  ].map((match) => match[1]);
-
-  const candidates = urlMatches
-    .filter((url) => !/\.(?:css|js|png|jpg|jpeg|gif|svg|ico)(?:\?|$)/i.test(url))
-    .filter((url) => /lt645|result|win|epsd|lotto/i.test(url))
-    .map((url) => new URL(decodeHtml(url), pageUrl))
-    .map((url) => {
-      if (!url.searchParams.has("ltEpsd")) url.searchParams.set("ltEpsd", String(round));
-      return url.toString();
-    });
-
-  const uniqueCandidates = [...new Set(candidates)];
-  debugLog("data_url_candidates", uniqueCandidates.join("\n"), 2000);
-  return uniqueCandidates;
+    })
+  };
 }
 
 async function fetchText(url) {
@@ -244,31 +148,13 @@ async function fetchOfficialDraw(round) {
     for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
       try {
         const body = await fetchText(url);
-
         const trimmedBody = body.trim();
-        debugResultPage(trimmedBody, url, round);
 
         if (trimmedBody.includes("조회된 결과가 없습니다") || trimmedBody.includes("검색된 결과가 없습니다")) {
           return null;
         }
 
-        try {
-          return parseOfficialResultPage(trimmedBody, round);
-        } catch (parseError) {
-          const dataUrls = findResultDataUrls(trimmedBody, url, round);
-          console.warn(`official_result_page_parse_failed_trying_data_urls round=${round} count=${dataUrls.length} message=${parseError.message}`);
-
-          for (const dataUrl of dataUrls) {
-            const dataBody = await fetchText(dataUrl);
-            try {
-              return parseOfficialResultPage(dataBody.trim(), round);
-            } catch (dataParseError) {
-              console.warn(`official_result_data_url_parse_failed round=${round} url=${dataUrl} message=${dataParseError.message}`);
-            }
-          }
-
-          throw parseError;
-        }
+        return parseOfficialResultPayload(trimmedBody, round);
       } catch (error) {
         lastError = error;
         console.warn(`official_result_fetch_attempt_failed round=${round} url=${baseUrl} attempt=${attempt} message=${error.message}`);
@@ -285,20 +171,52 @@ async function findNewDraws(currentLatestRound) {
 
   for (let offset = 1; offset <= MAX_BACKFILL_ROUNDS; offset += 1) {
     const round = currentLatestRound + offset;
-    const draw = await fetchOfficialDraw(round);
-    if (!draw) break;
-    newDraws.push(draw);
+    let result = null;
+    try {
+      result = await fetchOfficialDraw(round);
+    } catch (error) {
+      if (newDraws.length > 0) {
+        console.warn(`Stopping after ${newDraws.length} new round(s). Round ${round} is not available or could not be parsed yet: ${error.message}`);
+        break;
+      }
+      throw error;
+    }
+
+    if (!result || result.notAvailable) break;
+    newDraws.push(result.draw);
   }
 
   return newDraws;
 }
 
-const current = readCurrentData();
+async function repairFutureRounds(current) {
+  const result = await fetchOfficialDraw(current.latestRound);
+  if (!result || !result.notAvailable || result.actualRound >= current.latestRound) {
+    return { current, removedCount: 0 };
+  }
+
+  const draws = current.draws.filter((draw) => draw.round <= result.actualRound);
+  return {
+    current: {
+      ...current,
+      draws,
+      latestRound: draws.reduce((max, draw) => Math.max(max, draw.round), 0)
+    },
+    removedCount: current.draws.length - draws.length
+  };
+}
+
+let current = readCurrentData();
 console.log(`Current latestRound=${current.latestRound}`);
+const repair = await repairFutureRounds(current);
+current = repair.current;
+if (repair.removedCount > 0) {
+  console.log(`Removed ${repair.removedCount} unavailable future round(s). latestRound=${current.latestRound}`);
+}
 
 const newDraws = await findNewDraws(current.latestRound);
 
-if (newDraws.length === 0) {
+if (newDraws.length === 0 && repair.removedCount === 0) {
   console.log(`No new rounds after ${current.latestRound}.`);
   process.exit(0);
 }

@@ -320,8 +320,6 @@
   <script>
     const STORAGE_KEY = "lotto-dashboard:v1";
     const DATA_URL = "lotto-data.json";
-    const OFFICIAL_DRAW_API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber";
-    const MAX_OFFICIAL_LOOKAHEAD = 12;
 
     const defaultState = {
       schemaVersion: 1,
@@ -421,66 +419,6 @@
         updatedAt: data.updatedAt || null,
         latestRound: draws.reduce((max, draw) => Math.max(max, draw.round), 0),
         draws: draws.sort((a, b) => b.round - a.round)
-      };
-    }
-
-    function normalizeOfficialDraw(payload) {
-      return normalizeDraw({
-        round: payload.drwNo,
-        date: payload.drwNoDate,
-        numbers: [
-          payload.drwtNo1,
-          payload.drwtNo2,
-          payload.drwtNo3,
-          payload.drwtNo4,
-          payload.drwtNo5,
-          payload.drwtNo6
-        ],
-        bonus: payload.bnusNo,
-        firstPrizeAmount: payload.firstWinamnt,
-        firstWinnerCount: payload.firstPrzwnerCo,
-        totalSellAmount: payload.totSellamnt
-      });
-    }
-
-    async function fetchOfficialDraw(round) {
-      const response = await fetch(`${OFFICIAL_DRAW_API_URL}&drwNo=${round}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`official_draw_http_${response.status}_round_${round}`);
-      const payload = await response.json();
-      if (payload.returnValue !== "success") return null;
-
-      const draw = normalizeOfficialDraw(payload);
-      if (!isValidDraw(draw)) throw new Error(`official_draw_invalid_round_${round}`);
-      return draw;
-    }
-
-    async function mergeOfficialUpdates(data) {
-      const newDraws = [];
-
-      for (let offset = 1; offset <= MAX_OFFICIAL_LOOKAHEAD; offset += 1) {
-        const round = data.latestRound + offset;
-        const draw = await fetchOfficialDraw(round);
-        if (!draw) break;
-        newDraws.push(draw);
-      }
-
-      if (newDraws.length === 0) {
-        return { data, addedCount: 0, officialCheckFailed: false };
-      }
-
-      const drawByRound = new Map([...newDraws, ...data.draws].map((draw) => [draw.round, draw]));
-      const draws = [...drawByRound.values()].sort((a, b) => b.round - a.round);
-
-      return {
-        data: {
-          ...data,
-          source: `${data.source}+official-live`,
-          updatedAt: new Date().toISOString(),
-          latestRound: draws[0].round,
-          draws
-        },
-        addedCount: newDraws.length,
-        officialCheckFailed: false
       };
     }
 
@@ -1174,27 +1112,12 @@
 
       try {
         drawData = await loadDrawData();
-        let addedCount = 0;
-        let officialCheckFailed = false;
-
-        try {
-          const result = await mergeOfficialUpdates(drawData);
-          drawData = result.data;
-          addedCount = result.addedCount;
-          officialCheckFailed = result.officialCheckFailed;
-        } catch (officialError) {
-          officialCheckFailed = true;
-          console.warn("official_update_check_failed", officialError);
-        }
-
         if (drawData.draws.length > 0 && appState.recommendations.length === 0) {
           appState = generateRecommendations(appState, drawData.draws);
         }
         renderApp(appState, drawData, {
           title: "데이터 로드 완료",
-          message: officialCheckFailed
-            ? `${drawData.draws.length}개 회차를 불러왔습니다. 공식 최신 회차 확인은 브라우저에서 차단되었거나 실패했습니다.`
-            : `${drawData.draws.length}개 회차를 불러왔습니다.${addedCount > 0 ? ` 공식 API에서 새 회차 ${addedCount}개를 추가로 반영했습니다.` : " 저장된 데이터가 최신입니다."}`
+          message: `${drawData.draws.length}개 회차를 불러왔습니다.`
         });
       } catch (error) {
         console.warn("data_load_failed", error);

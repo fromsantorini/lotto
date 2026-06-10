@@ -25,14 +25,7 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Diagnose official result page
-        run: |
-          node --version
-          node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('lotto-data.json','utf8')); const next=(data.latestRound||0)+1; const url='https://www.dhlottery.co.kr/lt645/result?ltEpsd='+next; console.log('checkingRound=' + next); console.log('url=' + url); fetch(url,{headers:{accept:'text/html,*/*','accept-language':'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7','user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36'}}).then(async r=>{const body=await r.text(); console.log('status=' + r.status); console.log('content-type=' + r.headers.get('content-type')); console.log(body.trim().slice(0,500)); if(!r.ok || !body.includes('ltEpsd')) process.exit(1);}).catch(e=>{console.error(e); process.exit(1);})"
-
       - name: Update lotto data
-        env:
-          DEBUG_LOTTO: "1"
         run: node tools/update-lotto-data.mjs
 
       - name: Commit updated data
