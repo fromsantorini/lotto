@@ -189,34 +189,12 @@ async function findNewDraws(currentLatestRound) {
   return newDraws;
 }
 
-async function repairFutureRounds(current) {
-  const result = await fetchOfficialDraw(current.latestRound);
-  if (!result || !result.notAvailable || result.actualRound >= current.latestRound) {
-    return { current, removedCount: 0 };
-  }
-
-  const draws = current.draws.filter((draw) => draw.round <= result.actualRound);
-  return {
-    current: {
-      ...current,
-      draws,
-      latestRound: draws.reduce((max, draw) => Math.max(max, draw.round), 0)
-    },
-    removedCount: current.draws.length - draws.length
-  };
-}
-
-let current = readCurrentData();
+const current = readCurrentData();
 console.log(`Current latestRound=${current.latestRound}`);
-const repair = await repairFutureRounds(current);
-current = repair.current;
-if (repair.removedCount > 0) {
-  console.log(`Removed ${repair.removedCount} unavailable future round(s). latestRound=${current.latestRound}`);
-}
 
 const newDraws = await findNewDraws(current.latestRound);
 
-if (newDraws.length === 0 && repair.removedCount === 0) {
+if (newDraws.length === 0) {
   console.log(`No new rounds after ${current.latestRound}.`);
   process.exit(0);
 }
