@@ -87,15 +87,6 @@ function parseResultDate(html) {
 }
 
 function parseOfficialResultPayload(html, round) {
-  const roundMatch = html.match(/"ltEpsd"\s*:\s*"?(\d+)"?/);
-  if (!roundMatch) {
-    throw new Error(`official_result_round_parse_failed_round_${round}`);
-  }
-  const actualRound = Number(roundMatch[1]);
-  if (actualRound !== round) {
-    return { notAvailable: true, actualRound };
-  }
-
   const mainNumbers = [...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g)]
     .map((match) => Number(match[1]));
   const bonusNumbers = [...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)]
@@ -109,11 +100,16 @@ function parseOfficialResultPayload(html, round) {
   const firstWinnerMatch = html.match(/"rnk1WnNope"\s*:\s*"?([\d,]+)"?/);
   const firstPrizeAmount = firstPrizeMatch ? toMoneyNumber(firstPrizeMatch[1]) : 0;
   const firstWinnerCount = firstWinnerMatch ? toMoneyNumber(firstWinnerMatch[1]) : 0;
+  const date = parseResultDate(html);
+
+  if (!date || firstPrizeAmount <= 0 || firstWinnerCount <= 0) {
+    return { notAvailable: true };
+  }
 
   return {
     draw: validateDraw({
-    round: actualRound,
-    date: parseResultDate(html),
+    round,
+    date,
     numbers: mainNumbers,
     bonus: bonusNumbers[0],
     firstPrizeAmount,
