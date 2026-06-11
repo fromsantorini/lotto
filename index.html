@@ -200,6 +200,78 @@
       padding: 14px;
     }
 
+    .hero-panel {
+      background:
+        radial-gradient(circle at top left, rgba(31, 111, 235, 0.12), transparent 38%),
+        linear-gradient(135deg, #ffffff 0%, #f3f7ff 100%);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head p {
+      margin: 4px 0 0;
+    }
+
+    .latest-follow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .latest-follow-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fcfdff;
+    }
+
+    .ball-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .stat-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 0;
+    }
+
+    .stat-pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--ink-soft);
+      background: #fff;
+    }
+
+    .inline-ball-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .inline-ball-list .ball {
+      width: 32px;
+      height: 32px;
+      font-size: 13px;
+    }
+
     .form-row {
       display: flex;
       gap: 8px;
@@ -302,9 +374,10 @@
     <section id="statusPanel" class="status-panel"></section>
 
     <div id="dashboardView" class="view active">
-      <section id="latestPanel" class="panel"></section>
-      <section id="recommendPanel" class="panel"></section>
+      <section id="latestPanel" class="panel hero-panel"></section>
+      <section id="latestFollowerPanel" class="panel"></section>
       <section id="statsPanel" class="panel"></section>
+      <section id="recommendPanel" class="panel"></section>
       <section id="patternPanel" class="panel"></section>
     </div>
 
@@ -640,6 +713,45 @@
       };
     }
 
+    function analyzeLatestNumberFollowers(draws, recentLimit = 5) {
+      const latest = draws[0];
+      if (!latest) return [];
+
+      const byRound = new Map(draws.map((draw) => [draw.round, draw]));
+      return latest.numbers.map((number) => {
+        const matchedPairs = draws
+          .filter((draw) => draw.round !== latest.round && draw.numbers.includes(number))
+          .map((draw) => ({
+            baseDraw: draw,
+            nextDraw: byRound.get(draw.round + 1)
+          }))
+          .filter((item) => item.nextDraw)
+          .sort((a, b) => b.baseDraw.round - a.baseDraw.round)
+          .slice(0, recentLimit);
+
+        const nextDraws = matchedPairs.map((item) => item.nextDraw);
+        const stats = calculateStats(nextDraws, nextDraws.length);
+        const topNextNumbers = [...stats.frequency]
+          .filter((item) => item.count > 0)
+          .sort((a, b) => b.count - a.count || a.number - b.number)
+          .slice(0, 6);
+        const repeatedLatestNumbers = topNextNumbers
+          .filter((item) => latest.numbers.includes(item.number))
+          .map((item) => item.number);
+
+        return {
+          number,
+          sampleCount: matchedPairs.length,
+          sampleLimit: recentLimit,
+          matchedPairs,
+          nextDraws,
+          stats,
+          topNextNumbers,
+          repeatedLatestNumbers
+        };
+      });
+    }
+
     function expectedMainNumberCount(drawCount) {
       return drawCount * (6 / 45);
     }
@@ -874,13 +986,80 @@
     function renderLatest(data) {
       const latest = data.draws[0];
       document.querySelector("#latestPanel").innerHTML = latest ? `
-        <h2>최근 당첨번호</h2>
-        <p class="muted">${latest.round}회 · ${latest.date || "날짜 없음"}</p>
+        <div class="section-head">
+          <div>
+            <h2>최신 당첨 번호</h2>
+            <p class="muted">${latest.round}회 · ${latest.date || "날짜 없음"}</p>
+          </div>
+        </div>
         ${renderBalls(latest.numbers, latest.bonus)}
-        <p>1등 ${latest.firstWinnerCount}명 · 1인당 ${formatCurrency(latest.firstPrizeAmount)}원</p>
+        <div class="stat-pills">
+          <span class="stat-pill">1등 ${latest.firstWinnerCount}명</span>
+          <span class="stat-pill">1인당 ${formatCurrency(latest.firstPrizeAmount)}원</span>
+        </div>
       ` : `
-        <h2>최근 당첨번호</h2>
+        <h2>최신 당첨 번호</h2>
         <p class="error">아직 읽어온 당첨번호가 없습니다.</p>
+      `;
+    }
+
+    function renderLatestFollowerPanel(data) {
+      const panel = document.querySelector("#latestFollowerPanel");
+      const latest = data.draws[0];
+      if (!latest) {
+        panel.innerHTML = "<h2>최신 번호 기반 다음 회차 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+        return;
+      }
+
+      const analyses = analyzeLatestNumberFollowers(data.draws, 5);
+      panel.innerHTML = `
+        <div class="section-head">
+          <div>
+            <h2>최신 번호 기반 다음 회차 통계</h2>
+            <p class="muted">최신 당첨 번호의 각 숫자가 포함됐던 과거 회차를 기준으로, 그 다음 회차를 최근 5개 표본까지 요약했습니다.</p>
+          </div>
+        </div>
+        <div class="latest-follow-grid">
+          ${analyses.map((analysis) => {
+            const hotMax = Math.max(...analysis.topNextNumbers.map((item) => item.count), 1);
+            const roundsText = analysis.matchedPairs.length
+              ? analysis.matchedPairs.map((item) => `${item.baseDraw.round}→${item.nextDraw.round}`).join(", ")
+              : "-";
+            return `
+              <article class="latest-follow-card">
+                <span class="ball-badge ${getBallClass(analysis.number)}">${analysis.number}</span>
+                <h3>${analysis.number}번이 나온 뒤 다음 회차</h3>
+                ${analysis.sampleCount ? `
+                  <div class="grid">
+                    <div class="metric">
+                      <p class="muted">표본</p>
+                      <p class="metric-value">${analysis.sampleCount}</p>
+                    </div>
+                    <div class="metric">
+                      <p class="muted">다음 회차 합계 평균</p>
+                      <p class="metric-value">${analysis.stats.averageSum.toFixed(1)}</p>
+                    </div>
+                  </div>
+                  <p class="muted" style="margin-top:10px;">기준 회차 → 다음 회차: ${roundsText}</p>
+                  <div style="margin-top:10px;">
+                    <h3>다음 회차에서 자주 나온 번호</h3>
+                    ${renderMiniBars(analysis.topNextNumbers, hotMax, (item) => `${item.number}번`)}
+                  </div>
+                  <div class="stat-pills">
+                    <span class="stat-pill">평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}</span>
+                    <span class="stat-pill">평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}</span>
+                    <span class="stat-pill">최신 번호 재등장 ${analysis.repeatedLatestNumbers.join(", ") || "없음"}</span>
+                  </div>
+                  <div class="inline-ball-list">
+                    ${analysis.topNextNumbers.map((item) => `<span class="ball ${getBallClass(item.number)}">${item.number}</span>`).join("")}
+                  </div>
+                ` : `
+                  <p class="warning">이 번호가 포함된 과거 회차의 다음 회차 표본이 아직 충분하지 않습니다.</p>
+                `}
+              </article>
+            `;
+          }).join("")}
+        </div>
       `;
     }
 
@@ -1098,8 +1277,9 @@
       currentLoadStatus = loadStatus;
       renderStatus(state, data, loadStatus);
       renderLatest(data);
-      renderRecommendations(state, data);
+      renderLatestFollowerPanel(data);
       renderStats(data);
+      renderRecommendations(state, data);
       renderPatternPanel();
       renderSignificancePanel(data);
       renderHistory(state, data);

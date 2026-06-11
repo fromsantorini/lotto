@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataPath = resolve(root, "lotto-data.json");
+const OFFICIAL_RESULT_API_URL = "https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do";
 const OFFICIAL_RESULT_PAGE_URLS = [
   "https://www.dhlottery.co.kr/lt645/result"
 ];
@@ -72,10 +73,16 @@ function toMoneyNumber(value) {
   return Number(String(value || "").replace(/[^\d]/g, "")) || 0;
 }
 
+function formatYmd(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (digits.length !== 8) return "";
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
 function parseResultDate(html) {
   const ymdMatch = html.match(/"ltRflYmd"\s*:\s*"?(\d{8})"?/);
   if (ymdMatch) {
-    return `${ymdMatch[1].slice(0, 4)}-${ymdMatch[1].slice(4, 6)}-${ymdMatch[1].slice(6, 8)}`;
+    return formatYmd(ymdMatch[1]);
   }
 
   const koreanDateMatch = html.match(/\(?\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*추첨\s*\)?/);
@@ -119,14 +126,42 @@ function parseOfficialResultPayload(html, round) {
   };
 }
 
+function getRequestHeaders() {
+  return {
+    accept: "text/html,application/json,*/*",
+    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    referer: "https://www.dhlottery.co.kr/lt645/result",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+  };
+}
+
+export function mapOfficialApiItemToDraw(item) {
+  return validateDraw({
+    round: item.ltEpsd,
+    date: formatYmd(item.ltRflYmd),
+    numbers: [item.tm1WnNo, item.tm2WnNo, item.tm3WnNo, item.tm4WnNo, item.tm5WnNo, item.tm6WnNo],
+    bonus: item.bnsWnNo,
+    firstPrizeAmount: item.rnk1WnAmt,
+    firstWinnerCount: item.rnk1WnNope,
+    totalSellAmount: item.rlvtEpsdSumNtslAmt || 0
+  });
+}
+
+export function parseOfficialApiResponse(payload, round) {
+  const list = Array.isArray(payload?.data?.list) ? payload.data.list : [];
+  if (list.length === 0) return null;
+
+  const exactMatch = list.find((item) => Number(item?.ltEpsd) === round);
+  if (!exactMatch) return null;
+
+  return {
+    draw: mapOfficialApiItemToDraw(exactMatch)
+  };
+}
+
 async function fetchText(url) {
   const response = await fetch(url, {
-    headers: {
-      accept: "text/html,application/json,*/*",
-      "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-      referer: "https://www.dhlottery.co.kr/lt645/result",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
-    }
+    headers: getRequestHeaders()
   });
   const body = await response.text();
   if (!response.ok) {
@@ -135,8 +170,43 @@ async function fetchText(url) {
   return body;
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      ...getRequestHeaders(),
+      accept: "application/json,text/plain,*/*",
+      "x-requested-with": "XMLHttpRequest"
+    }
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`official_result_http_${response.status}_url_${url}_${stripTags(body).slice(0, 120)}`);
+  }
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    throw new Error(`official_result_json_parse_failed_${error.message}`);
+  }
+}
+
+async function fetchOfficialDrawViaApi(round) {
+  const url = `${OFFICIAL_RESULT_API_URL}?srchDir=center&srchLtEpsd=${round}`;
+  const payload = await fetchJson(url);
+  return parseOfficialApiResponse(payload, round);
+}
+
 async function fetchOfficialDraw(round) {
   let lastError = null;
+
+  for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
+    try {
+      return await fetchOfficialDrawViaApi(round);
+    } catch (error) {
+      lastError = error;
+      console.warn(`official_result_api_attempt_failed round=${round} attempt=${attempt} message=${error.message}`);
+      if (attempt < REQUEST_RETRY_COUNT) await sleep(REQUEST_RETRY_DELAY_MS * attempt);
+    }
+  }
 
   for (const baseUrl of OFFICIAL_RESULT_PAGE_URLS) {
     const url = `${baseUrl}?ltEpsd=${round}`;
@@ -185,26 +255,32 @@ async function findNewDraws(currentLatestRound) {
   return newDraws;
 }
 
-const current = readCurrentData();
-console.log(`Current latestRound=${current.latestRound}`);
+export async function main() {
+  const current = readCurrentData();
+  console.log(`Current latestRound=${current.latestRound}`);
 
-const newDraws = await findNewDraws(current.latestRound);
+  const newDraws = await findNewDraws(current.latestRound);
 
-if (newDraws.length === 0) {
-  console.log(`No new rounds after ${current.latestRound}.`);
-  process.exit(0);
+  if (newDraws.length === 0) {
+    console.log(`No new rounds after ${current.latestRound}.`);
+    return;
+  }
+
+  const merged = [...newDraws, ...current.draws]
+    .map(validateDraw)
+    .sort((a, b) => b.round - a.round);
+
+  writeFileSync(dataPath, `${JSON.stringify({
+    ...current,
+    source: "incremental-official-lt645-result",
+    updatedAt: new Date().toISOString(),
+    latestRound: merged[0].round,
+    draws: merged
+  }, null, 2)}\n`, "utf8");
+
+  console.log(`Added ${newDraws.length} round(s). latestRound=${merged[0].round}`);
 }
 
-const merged = [...newDraws, ...current.draws]
-  .map(validateDraw)
-  .sort((a, b) => b.round - a.round);
-
-writeFileSync(dataPath, `${JSON.stringify({
-  ...current,
-  source: "incremental-official-lt645-result",
-  updatedAt: new Date().toISOString(),
-  latestRound: merged[0].round,
-  draws: merged
-}, null, 2)}\n`, "utf8");
-
-console.log(`Added ${newDraws.length} round(s). latestRound=${merged[0].round}`);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

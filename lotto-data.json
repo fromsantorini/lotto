@@ -1,9 +1,25 @@
 {
   "schemaVersion": 1,
-  "source": "data/lotto-history.csv",
-  "updatedAt": "2026-06-04T03:17:39.359Z",
-  "latestRound": 1226,
+  "source": "incremental-official-lt645-result",
+  "updatedAt": "2026-06-11T14:28:09.929Z",
+  "latestRound": 1227,
   "draws": [
+    {
+      "round": 1227,
+      "date": "2026-06-06",
+      "numbers": [
+        1,
+        14,
+        16,
+        34,
+        41,
+        44
+      ],
+      "bonus": 13,
+      "firstPrizeAmount": 2674808455,
+      "firstWinnerCount": 11,
+      "totalSellAmount": 59441280119
+    },
     {
       "round": 1226,
       "date": "2026-05-30",

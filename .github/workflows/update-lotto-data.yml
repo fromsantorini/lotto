@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Run lotto updater tests
+        run: node --test tools/update-lotto-data.test.mjs
+
       - name: Update lotto data
         run: node tools/update-lotto-data.mjs
 
