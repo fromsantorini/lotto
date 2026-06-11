@@ -87,17 +87,17 @@ function parseResultDate(html) {
 }
 
 function parseOfficialResultPayload(html, round) {
-  const mainNumbers = [...html.matchAll(/"tm[1-6]WnNo"\s*:\s*"?(\d{1,2})"?/g)]
+  const mainNumbers = [...html.matchAll(/["']?tm[1-6]WnNo["']?\s*[:=]\s*["']?(\d{1,2})["']?/g)]
     .map((match) => Number(match[1]));
-  const bonusNumbers = [...html.matchAll(/"bnsWnNo"\s*:\s*"?(\d{1,2})"?/g)]
+  const bonusNumbers = [...html.matchAll(/["']?bnsWnNo["']?\s*[:=]\s*["']?(\d{1,2})["']?/g)]
     .map((match) => Number(match[1]));
 
   if (mainNumbers.length !== 6 || bonusNumbers.length < 1) {
     throw new Error(`official_result_payload_parse_failed_round_${round}_main=${mainNumbers.length}_bonus=${bonusNumbers.length}`);
   }
 
-  const firstPrizeMatch = html.match(/"rnk1WnAmt"\s*:\s*"?([\d,]+)"?/);
-  const firstWinnerMatch = html.match(/"rnk1WnNope"\s*:\s*"?([\d,]+)"?/);
+  const firstPrizeMatch = html.match(/["']?rnk1WnAmt["']?\s*[:=]\s*["']?([\d,]+)["']?/);
+  const firstWinnerMatch = html.match(/["']?rnk1WnNope["']?\s*[:=]\s*["']?([\d,]+)["']?/);
   const firstPrizeAmount = firstPrizeMatch ? toMoneyNumber(firstPrizeMatch[1]) : 0;
   const firstWinnerCount = firstWinnerMatch ? toMoneyNumber(firstWinnerMatch[1]) : 0;
   const date = parseResultDate(html);
