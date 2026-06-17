@@ -200,6 +200,78 @@
       padding: 14px;
     }
 
+    .briefing-panel {
+      background:
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+
+    .briefing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .briefing-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .briefing-kicker {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .briefing-card h3 {
+      margin-bottom: 10px;
+    }
+
+    .briefing-card p {
+      margin: 0;
+    }
+
+    .briefing-numbers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .briefing-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      height: 42px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-weight: 800;
+      color: white;
+    }
+
+    .briefing-card.support-card {
+      background: #fcfdff;
+    }
+
+    .section-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .ghost-button {
+      background: #eef4ff;
+      color: var(--blue);
+    }
+
     .hero-panel {
       background:
         radial-gradient(circle at top left, rgba(31, 111, 235, 0.12), transparent 38%),
@@ -367,7 +439,7 @@
 
     <nav class="view-tabs" aria-label="화면 선택">
       <button class="tab-button active" type="button" data-view="dashboard">대시보드</button>
-      <button class="tab-button" type="button" data-view="patterns">패턴 분석</button>
+      <button class="tab-button" type="button" data-view="stats">통계</button>
       <button class="tab-button" type="button" data-view="history">역대 당첨번호</button>
     </nav>
 
@@ -375,13 +447,13 @@
 
     <div id="dashboardView" class="view active">
       <section id="latestPanel" class="panel hero-panel"></section>
-      <section id="latestFollowerPanel" class="panel"></section>
-      <section id="statsPanel" class="panel"></section>
+      <section id="briefingPanel" class="panel briefing-panel"></section>
       <section id="recommendPanel" class="panel"></section>
-      <section id="patternPanel" class="panel"></section>
     </div>
 
-    <div id="patternsView" class="view">
+    <div id="statsView" class="view">
+      <section id="statsPanel" class="panel"></section>
+      <section id="followerStatsPanel" class="panel"></section>
       <section id="significancePanel" class="panel"></section>
     </div>
 
@@ -400,7 +472,7 @@
       recommendations: [],
       preferences: {
         statWindow: 100,
-        recommendationCount: 5,
+        recommendationCount: 3,
         historyLimit: 50,
         historyQuery: ""
       }
@@ -459,7 +531,8 @@
           recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
           preferences: {
             ...cloneDefaultState().preferences,
-            ...(parsed.preferences || {})
+            ...(parsed.preferences || {}),
+            recommendationCount: Math.min(3, Math.max(1, Number(parsed.preferences?.recommendationCount || cloneDefaultState().preferences.recommendationCount)))
           }
         };
       } catch (error) {
@@ -594,6 +667,22 @@
       return new Set(draws.map((draw) => combinationKey(draw.numbers)));
     }
 
+    function buildSafeFallbackCombination(historicalCombinations) {
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        const fallback = shuffle(Array.from({ length: 45 }, (_, index) => index + 1))
+          .slice(0, 6)
+          .sort((a, b) => a - b);
+        if (!historicalCombinations.has(combinationKey(fallback))) return fallback;
+      }
+
+      for (let start = 1; start <= 40; start += 1) {
+        const fallback = Array.from({ length: 6 }, (_, index) => start + index);
+        if (!historicalCombinations.has(combinationKey(fallback))) return fallback;
+      }
+
+      throw new Error("no_unique_recommendation_available");
+    }
+
     function makeRecommendation(stats, historicalCombinations) {
       const hot = stats.hotNumbers.slice(0, 12).map((item) => item.number);
       const cold = stats.coldNumbers.slice(0, 12).map((item) => item.number);
@@ -630,13 +719,7 @@
         }
       }
 
-      let fallback = [];
-      for (let attempt = 0; attempt < 500; attempt += 1) {
-        fallback = shuffle(Array.from({ length: 45 }, (_, index) => index + 1))
-          .slice(0, 6)
-          .sort((a, b) => a - b);
-        if (!historicalCombinations.has(combinationKey(fallback))) break;
-      }
+      const fallback = buildSafeFallbackCombination(historicalCombinations);
       const oddEven = countOddEven(fallback);
       const lowHigh = countLowHigh(fallback);
       return {
@@ -671,7 +754,7 @@
 
       return saveState({
         ...state,
-        recommendations: [...nextRecommendations, ...state.recommendations].slice(0, 30)
+        recommendations: nextRecommendations
       });
     }
 
@@ -713,21 +796,24 @@
       };
     }
 
-    function analyzeLatestNumberFollowers(draws, recentLimit = 5) {
+    function analyzeLatestNumberFollowers(draws, recentLimit = Number.POSITIVE_INFINITY) {
       const latest = draws[0];
       if (!latest) return [];
 
       const byRound = new Map(draws.map((draw) => [draw.round, draw]));
       return latest.numbers.map((number) => {
-        const matchedPairs = draws
+        const allMatchedPairs = draws
           .filter((draw) => draw.round !== latest.round && draw.numbers.includes(number))
           .map((draw) => ({
             baseDraw: draw,
             nextDraw: byRound.get(draw.round + 1)
           }))
           .filter((item) => item.nextDraw)
-          .sort((a, b) => b.baseDraw.round - a.baseDraw.round)
-          .slice(0, recentLimit);
+          .sort((a, b) => b.baseDraw.round - a.baseDraw.round);
+
+        const matchedPairs = Number.isFinite(recentLimit)
+          ? allMatchedPairs.slice(0, recentLimit)
+          : allMatchedPairs;
 
         const nextDraws = matchedPairs.map((item) => item.nextDraw);
         const stats = calculateStats(nextDraws, nextDraws.length);
@@ -840,7 +926,7 @@
       };
     }
 
-    function analyzeLastDigitPatterns(draws, recentLimit = 100) {
+    function analyzeLastDigitPatterns(draws, recentLimit = 5) {
       const digitCounts = Array.from({ length: 10 }, (_, digit) => ({
         digit,
         count: 0,
@@ -929,14 +1015,60 @@
         if (getConsecutiveRuns(draw.numbers).some((run) => run.length >= 2)) recentTwoPlus += 1;
       });
 
+      const overallTwoPlusRate = draws.length ? summary.twoPlus / draws.length : 0;
+      const recentTwoPlusRate = recentDraws.length ? recentTwoPlus / recentDraws.length : 0;
+      const trendRatio = overallTwoPlusRate > 0 ? recentTwoPlusRate / overallTwoPlusRate : 0;
+      const estimatedNextRate = overallTwoPlusRate > 0
+        ? Math.min(1, Math.max(0, overallTwoPlusRate * trendRatio))
+        : recentTwoPlusRate;
+
       return {
         recentLimit,
         summary,
-        overallTwoPlusRate: draws.length ? summary.twoPlus / draws.length : 0,
-        recentTwoPlusRate: recentDraws.length ? recentTwoPlus / recentDraws.length : 0,
+        overallTwoPlusRate,
+        recentTwoPlusRate,
+        trendRatio,
+        estimatedNextRate,
         topPairs: [...pairCounts.entries()]
           .map(([key, count]) => ({ pair: key.split("-").map(Number), count }))
           .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+      };
+    }
+
+    function analyzeNeighborFollowers(draws) {
+      const byRound = new Map(draws.map((draw) => [draw.round, draw]));
+      const neighborCounts = new Map();
+      let baseCount = 0;
+      let matchedNextDrawCount = 0;
+
+      draws.forEach((draw) => {
+        const nextDraw = byRound.get(draw.round + 1);
+        if (!nextDraw) return;
+        baseCount += 1;
+
+        const hits = new Set();
+        draw.numbers.forEach((number) => {
+          [number - 1, number + 1]
+            .filter((candidate) => candidate >= 1 && candidate <= 45)
+            .forEach((candidate) => {
+              if (nextDraw.numbers.includes(candidate)) {
+                hits.add(candidate);
+                neighborCounts.set(candidate, (neighborCounts.get(candidate) || 0) + 1);
+              }
+            });
+        });
+
+        if (hits.size > 0) matchedNextDrawCount += 1;
+      });
+
+      return {
+        baseCount,
+        matchedNextDrawCount,
+        hitRate: baseCount ? matchedNextDrawCount / baseCount : 0,
+        topNeighbors: [...neighborCounts.entries()]
+          .map(([number, count]) => ({ number, count }))
+          .sort((a, b) => b.count - a.count || a.number - b.number)
           .slice(0, 10)
       };
     }
@@ -947,7 +1079,8 @@
         pairCooccurrence: analyzePairCooccurrence(draws),
         structural: analyzeStructuralPatterns(draws),
         lastDigits: analyzeLastDigitPatterns(draws),
-        consecutive: analyzeConsecutivePatterns(draws)
+        consecutive: analyzeConsecutivePatterns(draws),
+        neighborFollowers: analyzeNeighborFollowers(draws)
       };
     }
 
@@ -973,6 +1106,110 @@
 
     function formatPercent(value) {
       return `${(value * 100).toFixed(1)}%`;
+    }
+
+    function safeTopNumbers(items, count = 3) {
+      return items.slice(0, count).map((item) => item.number);
+    }
+
+    function formatNumberList(numbers) {
+      return numbers.length ? numbers.map((number) => `${number}번`).join(", ") : "없음";
+    }
+
+    function createBriefingModel(data, state) {
+      const stats = calculateStats(data.draws, state.preferences.statWindow);
+      const hotNumbers = safeTopNumbers(stats.hotNumbers, 3);
+      const coldNumbers = safeTopNumbers(stats.coldNumbers, 3);
+      const sampleIsThin = stats.drawCount < 10;
+      const followerAnalyses = analyzeLatestNumberFollowers(data.draws)
+        .filter((analysis) => analysis.sampleCount >= 3)
+        .sort((a, b) => b.sampleCount - a.sampleCount || b.stats.averageSum - a.stats.averageSum);
+      const follower = followerAnalyses[0] || null;
+
+      return {
+        stats,
+        cards: [
+          {
+            kicker: "Hot Numbers",
+            title: "최근 강세 번호",
+            numbers: hotNumbers,
+            description: `최근 흐름에서는 ${formatNumberList(hotNumbers)}이 자주 보였습니다.`,
+            warning: sampleIsThin ? "표본이 적어 강세 번호 해석은 참고용입니다." : ""
+          },
+          {
+            kicker: "Cold Numbers",
+            title: "쉬어가는 번호",
+            numbers: coldNumbers,
+            description: `${formatNumberList(coldNumbers)}은 최근 출현이 드문 편입니다.`,
+            warning: sampleIsThin ? "표본이 적어 소외 번호 해석은 참고용입니다." : ""
+          },
+          {
+            kicker: "Structure",
+            title: "이번 주 기준선",
+            numbers: [],
+            description: `홀짝 ${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}, 저고 ${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}, 합계 평균 ${Math.round(stats.averageSum)}점이 중심입니다.`,
+            warning: ""
+          }
+        ],
+        follower
+      };
+    }
+
+    function summarizeFollowerAnalysis(analysis) {
+      if (!analysis || analysis.sampleCount < 3) {
+        return {
+          description: "최신 번호 기반 다음 회차 표본이 아직 충분하지 않아 보조 카드로만 유지합니다.",
+          statPills: ["표본 부족"],
+          balls: []
+        };
+      }
+
+      const topNumbers = analysis.topNextNumbers.slice(0, 3).map((item) => item.number);
+      return {
+        description: `${analysis.number}번이 포함됐던 과거 회차의 다음 회차에서는 ${formatNumberList(topNumbers)}이 자주 뒤따랐습니다.`,
+        statPills: [
+          `표본 ${analysis.sampleCount}회`,
+          `평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}`,
+          `평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}`
+        ],
+        balls: topNumbers
+      };
+    }
+
+    function buildRecommendationReasonSummary(recommendation) {
+      const hot = recommendation.reason.frequentNumbers;
+      const cold = recommendation.reason.coldNumbers;
+      if (recommendation.method === "fallback-random") {
+        return "기존 규칙으로 충분한 조합을 찾지 못해, 중복 이력만 피한 탐색용 대체 조합입니다.";
+      }
+
+      if (hot.length && cold.length) {
+        return `강세 번호 ${hot.join(", ")}와 쉬어가던 번호 ${cold.join(", ")}를 섞고, 홀짝 ${recommendation.reason.oddEven} 균형을 맞춘 조합입니다.`;
+      }
+
+      if (hot.length) {
+        return `최근 자주 나온 번호 ${hot.join(", ")} 축을 유지하면서 홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh} 균형을 맞춘 조합입니다.`;
+      }
+
+      if (cold.length) {
+        return `쉬어가던 번호 ${cold.join(", ")}를 섞어 변화폭을 준 조합이며, 합계 ${recommendation.reason.sum} 기준선도 함께 맞췄습니다.`;
+      }
+
+      return `홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh}, 합계 ${recommendation.reason.sum} 균형을 먼저 맞춘 탐색용 조합입니다.`;
+    }
+
+    function renderRecommendationBadges(recommendation) {
+      const badges = [
+        `홀짝 ${recommendation.reason.oddEven}`,
+        `저고 ${recommendation.reason.lowHigh}`,
+        `합계 ${recommendation.reason.sum}`
+      ];
+
+      if (recommendation.reason.frequentNumbers.length) badges.push(`강세 번호 포함 ${recommendation.reason.frequentNumbers.join(", ")}`);
+      if (recommendation.reason.coldNumbers.length) badges.push(`소외 번호 포함 ${recommendation.reason.coldNumbers.join(", ")}`);
+      if (recommendation.method === "fallback-random") badges.push("대체 조합");
+
+      return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
     }
 
     function renderStatus(state, data, loadStatus) {
@@ -1003,62 +1240,53 @@
       `;
     }
 
-    function renderLatestFollowerPanel(data) {
-      const panel = document.querySelector("#latestFollowerPanel");
-      const latest = data.draws[0];
-      if (!latest) {
-        panel.innerHTML = "<h2>최신 번호 기반 다음 회차 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+    function renderBriefing(data, state) {
+      const panel = document.querySelector("#briefingPanel");
+      if (data.draws.length === 0) {
+        panel.innerHTML = "<h2>이번 주 브리핑</h2><p>데이터를 먼저 불러와야 브리핑을 만들 수 있습니다.</p>";
         return;
       }
 
-      const analyses = analyzeLatestNumberFollowers(data.draws, 5);
+      const briefing = createBriefingModel(data, state);
+      const followerSummary = summarizeFollowerAnalysis(briefing.follower);
       panel.innerHTML = `
         <div class="section-head">
           <div>
-            <h2>최신 번호 기반 다음 회차 통계</h2>
-            <p class="muted">최신 당첨 번호의 각 숫자가 포함됐던 과거 회차를 기준으로, 그 다음 회차를 최근 5개 표본까지 요약했습니다.</p>
+            <h2>이번 주 브리핑</h2>
+            <p class="muted">최신 회차를 기준점으로 삼고, 최근 100개 회차 통계에서 바로 읽히는 흐름만 먼저 요약했습니다.</p>
           </div>
         </div>
-        <div class="latest-follow-grid">
-          ${analyses.map((analysis) => {
-            const hotMax = Math.max(...analysis.topNextNumbers.map((item) => item.count), 1);
-            const roundsText = analysis.matchedPairs.length
-              ? analysis.matchedPairs.map((item) => `${item.baseDraw.round}→${item.nextDraw.round}`).join(", ")
-              : "-";
-            return `
-              <article class="latest-follow-card">
-                <span class="ball-badge ${getBallClass(analysis.number)}">${analysis.number}</span>
-                <h3>${analysis.number}번이 나온 뒤 다음 회차</h3>
-                ${analysis.sampleCount ? `
-                  <div class="grid">
-                    <div class="metric">
-                      <p class="muted">표본</p>
-                      <p class="metric-value">${analysis.sampleCount}</p>
-                    </div>
-                    <div class="metric">
-                      <p class="muted">다음 회차 합계 평균</p>
-                      <p class="metric-value">${analysis.stats.averageSum.toFixed(1)}</p>
-                    </div>
-                  </div>
-                  <p class="muted" style="margin-top:10px;">기준 회차 → 다음 회차: ${roundsText}</p>
-                  <div style="margin-top:10px;">
-                    <h3>다음 회차에서 자주 나온 번호</h3>
-                    ${renderMiniBars(analysis.topNextNumbers, hotMax, (item) => `${item.number}번`)}
-                  </div>
-                  <div class="stat-pills">
-                    <span class="stat-pill">평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}</span>
-                    <span class="stat-pill">평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}</span>
-                    <span class="stat-pill">최신 번호 재등장 ${analysis.repeatedLatestNumbers.join(", ") || "없음"}</span>
-                  </div>
-                  <div class="inline-ball-list">
-                    ${analysis.topNextNumbers.map((item) => `<span class="ball ${getBallClass(item.number)}">${item.number}</span>`).join("")}
-                  </div>
-                ` : `
-                  <p class="warning">이 번호가 포함된 과거 회차의 다음 회차 표본이 아직 충분하지 않습니다.</p>
-                `}
-              </article>
-            `;
-          }).join("")}
+        <div class="briefing-grid">
+          ${briefing.cards.map((card) => `
+            <article class="briefing-card">
+              <p class="briefing-kicker">${card.kicker}</p>
+              <h3>${card.title}</h3>
+              ${card.numbers.length ? `
+                <div class="briefing-numbers">
+                  ${card.numbers.map((number) => `<span class="briefing-number ${getBallClass(number)}">${number}</span>`).join("")}
+                </div>
+              ` : `
+                <div class="stat-pills">
+                  <span class="stat-pill">최근 ${Math.min(briefing.stats.drawCount, state.preferences.statWindow)}개 회차 기준</span>
+                </div>
+              `}
+              <p>${card.description}</p>
+              ${card.warning ? `<p class="warning" style="margin-top:12px;">${card.warning}</p>` : ""}
+            </article>
+          `).join("")}
+          <article class="briefing-card support-card">
+            <p class="briefing-kicker">Latest Follow-up</p>
+            <h3>최신 번호 기반 보조 흐름</h3>
+            <p>${followerSummary.description}</p>
+            <div class="stat-pills">
+              ${followerSummary.statPills.map((item) => `<span class="stat-pill">${item}</span>`).join("")}
+            </div>
+            ${followerSummary.balls.length ? `
+              <div class="inline-ball-list">
+                ${followerSummary.balls.map((number) => `<span class="ball ${getBallClass(number)}">${number}</span>`).join("")}
+              </div>
+            ` : ""}
+          </article>
         </div>
       `;
     }
@@ -1072,18 +1300,29 @@
 
       const recommendations = state.recommendations.slice(0, state.preferences.recommendationCount);
       panel.innerHTML = `
-        <h2>추천 번호</h2>
-        <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 역대 1등 조합과 완전히 같은 번호는 제외합니다.</p>
-        <button id="generateButton" type="button">추천 새로 만들기</button>
+        <div class="section-head">
+          <div>
+            <h2>추천 번호</h2>
+            <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 역대 1등 당첨번호 6개 조합과 완전히 같은 번호는 제외합니다.</p>
+          </div>
+        </div>
+        <div class="section-actions">
+          <button id="generateButton" type="button">추천 새로 만들기</button>
+          <span class="stat-pill">기본 3세트 노출</span>
+          <span class="stat-pill">강세·소외·구조 신호 재사용</span>
+        </div>
         <div class="recommendation-list" style="margin-top:12px;">
           ${recommendations.length ? recommendations.map((recommendation) => `
             <article class="recommendation-card">
               ${renderBalls(recommendation.numbers)}
-              <p class="muted">홀짝 ${recommendation.reason.oddEven} · 저고 ${recommendation.reason.lowHigh} · 합계 ${recommendation.reason.sum}</p>
-              <p class="muted">자주 나온 번호 ${recommendation.reason.frequentNumbers.join(", ") || "-"} · 덜 나온 번호 ${recommendation.reason.coldNumbers.join(", ") || "-"}</p>
+              ${renderRecommendationBadges(recommendation)}
+              <p style="margin-top:12px;">${buildRecommendationReasonSummary(recommendation)}</p>
             </article>
           `).join("") : "<p>아직 추천 번호가 없습니다.</p>"}
         </div>
+        ${recommendations.length < state.preferences.recommendationCount ? `
+          <p class="warning" style="margin-top:12px;">이번에는 충분한 고유 조합을 모두 만들지 못했습니다. 가능한 조합부터 먼저 보여주고 있습니다.</p>
+        ` : ""}
       `;
       document.querySelector("#generateButton").addEventListener("click", () => {
         appState = generateRecommendations(appState, drawData.draws);
@@ -1106,8 +1345,8 @@
       const hotMax = Math.max(...stats.hotNumbers.map((item) => item.count), 1);
       const coldMax = Math.max(...stats.coldNumbers.map((item) => item.count), 1);
       document.querySelector("#statsPanel").innerHTML = `
-        <h2>전체 통계</h2>
-        <p class="muted">최근 ${Math.min(appState.preferences.statWindow, data.draws.length)}개 회차 기준입니다.</p>
+        <h2>통계 개요</h2>
+        <p class="muted">브리핑과 추천에 쓰인 근거를 더 길게 확인하는 영역입니다. 최근 ${Math.min(appState.preferences.statWindow, data.draws.length)}개 회차 기준입니다.</p>
         <div class="grid">
           <div class="metric"><h3>평균 홀짝</h3><p class="metric-value">${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}</p></div>
           <div class="metric"><h3>평균 저고</h3><p class="metric-value">${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}</p></div>
@@ -1120,43 +1359,54 @@
       `;
     }
 
-    function renderPatternPanel() {
-      document.querySelector("#patternPanel").innerHTML = `
-        <h2>번호 패턴 다음 회차 분석</h2>
-        <form id="patternForm" class="form-row">
-          <input id="patternNumbers" type="text" placeholder="예: 7, 14, 28" aria-label="분석 번호">
-          <select id="patternMode" aria-label="분석 조건">
-            <option value="any">하나라도 포함</option>
-            <option value="all">모두 포함</option>
-          </select>
-          <button type="submit">분석하기</button>
-        </form>
-        <div id="patternResults" style="margin-top:12px;"></div>
-      `;
-    }
-
-    function renderPatternResults(result) {
-      const target = document.querySelector("#patternResults");
-      const sampleWarning = result.nextDraws.length < 10
-        ? "<p class=\"warning\">표본이 10회 미만이라 해석에 주의하세요.</p>"
-        : "";
-      const hotMax = Math.max(...result.stats.hotNumbers.map((item) => item.count), 1);
-
-      if (result.matchedBaseDraws.length === 0) {
-        target.innerHTML = "<p>조건에 맞는 기준 회차가 없습니다.</p>";
+    function renderFollowerStats(data) {
+      const panel = document.querySelector("#followerStatsPanel");
+      if (data.draws.length === 0) {
+        panel.innerHTML = "<h2>최신 번호 기준 다음회차 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
         return;
       }
 
-      target.innerHTML = `
-        ${sampleWarning}
-        <div class="grid">
-          <div class="metric"><h3>기준 회차</h3><p class="metric-value">${result.matchedBaseDraws.length}</p></div>
-          <div class="metric"><h3>분석된 다음 회차</h3><p class="metric-value">${result.nextDraws.length}</p></div>
-          <div class="metric"><h3>다음 회차 합계 평균</h3><p class="metric-value">${result.stats.averageSum.toFixed(1)}</p></div>
+      const analyses = analyzeLatestNumberFollowers(data.draws);
+      panel.innerHTML = `
+        <div class="section-head">
+          <div>
+            <h2>최신 당첨 번호 기준 다음회차 통계</h2>
+            <p class="muted">최신 당첨 번호 각각이 포함됐던 전체 과거 회차를 기준으로, 다음 회차에서 어떤 번호와 구조가 뒤따랐는지 요약합니다.</p>
+          </div>
         </div>
-        <div class="metric" style="margin-top:12px;">
-          <h3>다음 회차에서 자주 나온 번호</h3>
-          ${result.nextDraws.length ? renderMiniBars(result.stats.hotNumbers, hotMax, (item) => `${item.number}번`) : "<p>최신 회차가 기준이라 다음 회차가 아직 없습니다.</p>"}
+        <div class="latest-follow-grid">
+          ${analyses.map((analysis) => {
+            const hotMax = Math.max(...analysis.topNextNumbers.map((item) => item.count), 1);
+            return `
+              <article class="latest-follow-card">
+                <span class="ball-badge ${getBallClass(analysis.number)}">${analysis.number}</span>
+                <h3>${analysis.number}번이 나온 뒤 다음 회차</h3>
+                ${analysis.sampleCount ? `
+                  <div class="grid">
+                    <div class="metric">
+                      <p class="muted">표본</p>
+                      <p class="metric-value">${analysis.sampleCount}</p>
+                    </div>
+                    <div class="metric">
+                      <p class="muted">다음 회차 합계 평균</p>
+                      <p class="metric-value">${analysis.stats.averageSum.toFixed(1)}</p>
+                    </div>
+                  </div>
+                  <div style="margin-top:10px;">
+                    <h3>다음 회차에서 자주 나온 번호</h3>
+                    ${renderMiniBars(analysis.topNextNumbers, hotMax, (item) => `${item.number}번`)}
+                  </div>
+                  <div class="stat-pills">
+                    <span class="stat-pill">평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}</span>
+                    <span class="stat-pill">평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}</span>
+                    <span class="stat-pill">최신 번호 재등장 ${analysis.repeatedLatestNumbers.join(", ") || "없음"}</span>
+                  </div>
+                ` : `
+                  <p class="warning">이 번호가 포함된 과거 회차의 다음 회차 표본이 아직 충분하지 않습니다.</p>
+                `}
+              </article>
+            `;
+          }).join("")}
         </div>
       `;
     }
@@ -1164,16 +1414,17 @@
     function renderSignificancePanel(data) {
       const panel = document.querySelector("#significancePanel");
       if (data.draws.length === 0) {
-        panel.innerHTML = "<h2>패턴 분석</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+        panel.innerHTML = "<h2>세부 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
         return;
       }
       const patterns = findStatisticalPatterns(data.draws);
       const frequencyMax = Math.max(...patterns.numberFrequency.map((item) => item.observed), 1);
-      const digitMax = Math.max(...patterns.lastDigits.digits.map((item) => item.count), 1);
+      const digitMax = Math.max(...patterns.lastDigits.digits.map((item) => item.recentCount), 1);
+      const neighborMax = Math.max(...patterns.neighborFollowers.topNeighbors.map((item) => item.count), 1);
 
       panel.innerHTML = `
-        <h2>패턴 분석</h2>
-        <p class="muted">로또 추첨은 독립 무작위 사건으로 보는 것이 맞습니다. 이 탭은 과거 데이터가 무작위 기대값에서 얼마나 벗어났는지 보여주는 탐색 도구이며, 다음 회차 예측이나 당첨 가능성 상승을 의미하지 않습니다.</p>
+        <h2>세부 통계</h2>
+        <p class="muted">로또 추첨은 독립 무작위 사건으로 보는 것이 맞습니다. 이 탭은 과거 데이터가 어떤 구조를 보였는지 정리하는 탐색 도구이며, 다음 회차 예측이나 당첨 가능성 상승을 의미하지 않습니다.</p>
         <p class="warning">많은 후보를 동시에 비교하면 우연히 유의해 보이는 결과가 생길 수 있습니다.</p>
         <div class="grid">
           <div class="metric">
@@ -1195,23 +1446,39 @@
         </div>
         <div class="grid" style="margin-top:12px;">
           <div class="metric">
+            <h3>이웃수 패턴</h3>
+            <p>기준 회차 ${patterns.neighborFollowers.baseCount}개 중 다음 회차에 이웃수(±1)가 나온 회차: ${patterns.neighborFollowers.matchedNextDrawCount}회 (${formatPercent(patterns.neighborFollowers.hitRate)})</p>
+            ${patterns.neighborFollowers.topNeighbors.length ? `
+              <div class="mini-bars" style="margin-top:12px;">${patterns.neighborFollowers.topNeighbors.map((item) => `
+                <div class="mini-bar">
+                  <strong>${item.number}번</strong>
+                  <div class="bar-track"><div class="bar-fill" style="width:${neighborMax ? (item.count / neighborMax) * 100 : 0}%"></div></div>
+                  <span>${item.count}회</span>
+                </div>
+              `).join("")}</div>
+            ` : "<p class=\"muted\">이웃수로 집계된 번호가 없습니다.</p>"}
+            <p class="muted">정의: 어떤 회차의 당첨번호에 대해 ±1 번호가 다음 회차 메인 번호 6개 안에 등장했는지 집계합니다.</p>
+          </div>
+          <div class="metric">
             <h3>끝수 패턴</h3>
             <div class="mini-bars">${patterns.lastDigits.digits.map((item) => `
               <div class="mini-bar">
                 <strong>${item.digit}끝</strong>
-                <div class="bar-track"><div class="bar-fill" style="width:${(item.count / digitMax) * 100}%"></div></div>
-                <span>${item.count}회 · 2개+ ${item.duplicateTwoPlusDraws}회</span>
+                <div class="bar-track"><div class="bar-fill" style="width:${digitMax ? (item.recentCount / digitMax) * 100 : 0}%"></div></div>
+                <span>최근 ${item.recentCount}회 · 최근 비율 ${formatPercent(item.recentShare)}</span>
               </div>
             `).join("")}</div>
-            <p class="muted">최근 강세: ${patterns.lastDigits.recentStrongDigits.map((item) => `${item.digit}끝 ${formatPercent(item.delta)}`).join(", ")}</p>
+            <p class="muted">최근 5회 번호 칸 기준 비율입니다. 전체 누적 비율과의 차이로 본 최근 강세: ${patterns.lastDigits.recentStrongDigits.map((item) => `${item.digit}끝 ${formatPercent(item.delta)}`).join(", ")}</p>
           </div>
           <div class="metric">
-            <h3>연번 패턴</h3>
-            <p>2연번 이상: ${patterns.consecutive.summary.twoPlus}회 (${formatPercent(patterns.consecutive.overallTwoPlusRate)})</p>
-            <p>3연번 이상: ${patterns.consecutive.summary.threePlus}회</p>
-            <p>4연번 이상: ${patterns.consecutive.summary.fourPlus}회</p>
-            <p>최근 ${patterns.consecutive.recentLimit}회 2연번 이상: ${formatPercent(patterns.consecutive.recentTwoPlusRate)}</p>
-            <p class="muted">자주 나온 연번: ${patterns.consecutive.topPairs.map((item) => `${item.pair.join("-")} ${item.count}회`).join(", ") || "-"}</p>
+            <h3>연번 등장 확률</h3>
+            <p>이번 회차 추정 연번 등장 확률: ${formatPercent(patterns.consecutive.estimatedNextRate)}</p>
+            <p>전체 회차 기준 연번(2개 이상 연속 번호) 등장 확률: ${formatPercent(patterns.consecutive.overallTwoPlusRate)}</p>
+            <p>최근 ${patterns.consecutive.recentLimit}회 기준 연번 등장 확률: ${formatPercent(patterns.consecutive.recentTwoPlusRate)}</p>
+            <p>전체 평균 대비 최근 흐름 배수: ${patterns.consecutive.trendRatio ? `${patterns.consecutive.trendRatio.toFixed(2)}배` : "비교 불가"}</p>
+            <p>3연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.threePlus / data.draws.length : 0)}</p>
+            <p>4연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.fourPlus / data.draws.length : 0)}</p>
+            <p class="muted">이번 회차 추정치는 전체 평균 대비 최근 5회 흐름 비율을 반영한 값입니다. 이론 확률이 아니라 과거 회차 비율 기반 추정치입니다.</p>
           </div>
           <div class="metric">
             <h3>합계 구조</h3>
@@ -1277,10 +1544,10 @@
       currentLoadStatus = loadStatus;
       renderStatus(state, data, loadStatus);
       renderLatest(data);
-      renderLatestFollowerPanel(data);
-      renderStats(data);
+      renderBriefing(data, state);
       renderRecommendations(state, data);
-      renderPatternPanel();
+      renderStats(data);
+      renderFollowerStats(data);
       renderSignificancePanel(data);
       renderHistory(state, data);
     }
@@ -1292,7 +1559,7 @@
 
       try {
         drawData = await loadDrawData();
-        if (drawData.draws.length > 0 && appState.recommendations.length === 0) {
+        if (drawData.draws.length > 0) {
           appState = generateRecommendations(appState, drawData.draws);
         }
         renderApp(appState, drawData, {
@@ -1319,20 +1586,6 @@
         button.classList.add("active");
         document.querySelector(`#${button.dataset.view}View`).classList.add("active");
       });
-    });
-
-    document.addEventListener("submit", (event) => {
-      if (event.target.id !== "patternForm") return;
-      event.preventDefault();
-      const input = document.querySelector("#patternNumbers").value;
-      const mode = document.querySelector("#patternMode").value;
-      const parsed = parseNumberInput(input);
-      if (!parsed.ok) {
-        document.querySelector("#patternResults").innerHTML = `<p class="error">${parsed.error}</p>`;
-        return;
-      }
-      const result = analyzeNextDraws(drawData.draws, parsed.numbers, mode);
-      renderPatternResults(result);
     });
 
     document.addEventListener("DOMContentLoaded", () => {
