@@ -88,6 +88,7 @@
       margin-top: 16px;
       overflow-x: auto;
       padding-bottom: 2px;
+      touch-action: manipulation;
     }
 
     button, input, select {
@@ -113,6 +114,7 @@
     .tab-button {
       background: #e9edf5;
       color: var(--text);
+      flex: 0 0 auto;
     }
 
     .tab-button.active {
@@ -198,6 +200,38 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 14px;
+    }
+
+    .history-batch-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .history-batch {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fcfdff;
+    }
+
+    .history-batch-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .history-batch-head p {
+      margin: 4px 0 0;
+    }
+
+    .history-draw {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
     }
 
     .briefing-panel {
@@ -449,6 +483,7 @@
       <section id="latestPanel" class="panel hero-panel"></section>
       <section id="briefingPanel" class="panel briefing-panel"></section>
       <section id="recommendPanel" class="panel"></section>
+      <section id="recommendHistoryPanel" class="panel"></section>
     </div>
 
     <div id="statsView" class="view">
@@ -467,9 +502,10 @@
     const DATA_URL = "lotto-data.json";
 
     const defaultState = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       updatedAt: null,
       recommendations: [],
+      savedRecommendationHistory: [],
       preferences: {
         statWindow: 100,
         recommendationCount: 3,
@@ -490,6 +526,7 @@
       title: "데이터 준비",
       message: "lotto-data.json을 불러오는 중입니다."
     };
+    let recommendationSaveStatus = "";
 
     function cloneDefaultState() {
       return JSON.parse(JSON.stringify(defaultState));
@@ -524,11 +561,12 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return cloneDefaultState();
         const parsed = JSON.parse(raw);
-        if (parsed.schemaVersion !== 1) return cloneDefaultState();
+        if (![1, 2].includes(parsed.schemaVersion)) return cloneDefaultState();
         return {
           ...cloneDefaultState(),
           ...parsed,
           recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+          savedRecommendationHistory: Array.isArray(parsed.savedRecommendationHistory) ? parsed.savedRecommendationHistory : [],
           preferences: {
             ...cloneDefaultState().preferences,
             ...(parsed.preferences || {}),
@@ -543,6 +581,7 @@
 
     function saveState(nextState) {
       const stateToSave = {
+        schemaVersion: 2,
         ...nextState,
         updatedAt: new Date().toISOString()
       };
@@ -755,6 +794,92 @@
       return saveState({
         ...state,
         recommendations: nextRecommendations
+      });
+    }
+
+    function createRecommendationHistoryId(batchId, numbers) {
+      return `${batchId}:${combinationKey(numbers)}`;
+    }
+
+    function getRecommendationHistoryLimit() {
+      return 30;
+    }
+
+    function saveCurrentRecommendations(state, data) {
+      const recommendations = state.recommendations.slice(0, state.preferences.recommendationCount);
+      if (!recommendations.length || !data.latestRound) return state;
+
+      const batchId = `batch-${Date.now()}-${data.latestRound + 1}`;
+      const createdAt = new Date().toISOString();
+      const nextEntries = recommendations.map((recommendation) => ({
+        id: createRecommendationHistoryId(batchId, recommendation.numbers),
+        batchId,
+        createdAt,
+        baseRound: data.latestRound,
+        targetRound: data.latestRound + 1,
+        numbers: [...recommendation.numbers].sort((a, b) => a - b),
+        method: recommendation.method,
+        reason: recommendation.reason,
+        status: "pending"
+      }));
+
+      recommendationSaveStatus = `다음 회차(${data.latestRound + 1}회) 결과 확인용으로 저장했습니다.`;
+      return saveState({
+        ...state,
+        savedRecommendationHistory: [
+          ...nextEntries,
+          ...state.savedRecommendationHistory
+        ].slice(0, getRecommendationHistoryLimit())
+      });
+    }
+
+    function calculateRecommendationMatch(numbers, draw) {
+      const matchCount = numbers.filter((number) => draw.numbers.includes(number)).length;
+      const bonusMatched = matchCount < 6 && numbers.includes(draw.bonus);
+      return { matchCount, bonusMatched };
+    }
+
+    function getPrizeTier(matchCount, bonusMatched) {
+      if (matchCount === 6) return "1등";
+      if (matchCount === 5 && bonusMatched) return "2등";
+      if (matchCount === 5) return "3등";
+      if (matchCount === 4) return "4등";
+      if (matchCount === 3) return "5등";
+      return "낙첨";
+    }
+
+    function reconcileRecommendationHistoryWithDraws(state, draws) {
+      if (!state.savedRecommendationHistory.length || !draws.length) return state;
+
+      const byRound = new Map(draws.map((draw) => [draw.round, draw]));
+      let changed = false;
+      const savedRecommendationHistory = state.savedRecommendationHistory.map((entry) => {
+        if (entry.status === "matched") return entry;
+
+        const draw = byRound.get(Number(entry.targetRound));
+        if (!draw) return entry;
+
+        const { matchCount, bonusMatched } = calculateRecommendationMatch(entry.numbers, draw);
+        changed = true;
+        return {
+          ...entry,
+          status: "matched",
+          result: {
+            drawRound: draw.round,
+            drawDate: draw.date || "",
+            winningNumbers: [...draw.numbers],
+            bonusNumber: draw.bonus,
+            matchCount,
+            bonusMatched,
+            prizeTier: getPrizeTier(matchCount, bonusMatched)
+          }
+        };
+      });
+
+      if (!changed) return state;
+      return saveState({
+        ...state,
+        savedRecommendationHistory
       });
     }
 
@@ -1212,6 +1337,99 @@
       return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
     }
 
+    function renderRecommendationHistoryStatus(entry) {
+      if (entry.status !== "matched" || !entry.result) {
+        return ["결과 대기", `${entry.targetRound}회 발표 전`];
+      }
+
+      const summary = entry.result.matchCount >= 3
+        ? `${entry.result.matchCount}개 일치${entry.result.bonusMatched ? " + 보너스" : ""}`
+        : "낙첨";
+      return [summary, entry.result.prizeTier];
+    }
+
+    function groupRecommendationHistory(entries) {
+      const groups = new Map();
+      entries.forEach((entry) => {
+        const key = entry.batchId || entry.id;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
+      });
+      return [...groups.values()].sort((left, right) => new Date(right[0].createdAt || 0) - new Date(left[0].createdAt || 0));
+    }
+
+    function renderRecommendationHistory(state) {
+      const panel = document.querySelector("#recommendHistoryPanel");
+      const history = Array.isArray(state.savedRecommendationHistory) ? state.savedRecommendationHistory : [];
+
+      if (!history.length) {
+        panel.innerHTML = `
+          <div class="section-head">
+            <div>
+              <h2>지난 추천 결과</h2>
+              <p class="muted">아직 저장한 추천이 없습니다. 이번 주 추천을 저장해 두면 다음 회차 결과가 나오면 여기서 바로 확인할 수 있습니다.</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const groups = groupRecommendationHistory(history);
+      panel.innerHTML = `
+        <div class="section-head">
+          <div>
+            <h2>지난 추천 결과</h2>
+            <p class="muted">저장한 추천 번호를 다음 회차 결과와 자동으로 맞춰 보여줍니다. 이 기록은 현재 브라우저에 저장됩니다.</p>
+          </div>
+        </div>
+        <div class="history-batch-list">
+          ${groups.map((group) => {
+            const first = group[0];
+            const pendingCount = group.filter((entry) => entry.status !== "matched").length;
+            return `
+              <section class="history-batch">
+                <div class="history-batch-head">
+                  <div>
+                    <h3>${first.baseRound}회 추천 -> ${first.targetRound}회 결과</h3>
+                    <p class="muted">${pendingCount ? `${pendingCount}세트 결과 대기 중` : `${group.length}세트 채점 완료`}</p>
+                  </div>
+                  <span class="stat-pill">${new Date(first.createdAt).toLocaleString("ko-KR")}</span>
+                </div>
+                <div class="recommendation-list">
+                  ${group.map((entry) => {
+                    const statusBadges = renderRecommendationHistoryStatus(entry);
+                    return `
+                      <article class="recommendation-card">
+                        ${renderBalls(entry.numbers)}
+                        <div class="stat-pills" style="margin-top:12px;">
+                          ${statusBadges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}
+                        </div>
+                        <p style="margin-top:12px;">
+                          ${entry.status === "matched" && entry.result
+                            ? `${entry.result.drawRound}회에서 ${entry.result.matchCount}개 일치${entry.result.bonusMatched ? "와 보너스 일치" : ""} 결과가 나왔습니다.`
+                            : `${entry.targetRound}회 결과 발표 전입니다.`}
+                        </p>
+                        ${entry.status === "matched" && entry.result ? `
+                          <div class="history-draw">
+                            <p class="muted" style="margin:0 0 10px;">실제 당첨 번호 (${entry.result.drawRound}회${entry.result.drawDate ? ` · ${entry.result.drawDate}` : ""})</p>
+                            ${renderBalls(entry.result.winningNumbers)}
+                            <div class="stat-pills">
+                              <span class="stat-pill">보너스 ${entry.result.bonusNumber}</span>
+                              <span class="stat-pill">${entry.result.prizeTier}</span>
+                            </div>
+                          </div>
+                        ` : ""}
+                      </article>
+                    `;
+                  }).join("")}
+                </div>
+              </section>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
     function renderStatus(state, data, loadStatus) {
       document.querySelector("#statusPanel").innerHTML = `
         <strong>${loadStatus.title}</strong>
@@ -1308,9 +1526,11 @@
         </div>
         <div class="section-actions">
           <button id="generateButton" type="button">추천 새로 만들기</button>
+          <button id="saveRecommendationsButton" class="ghost-button" type="button" ${recommendations.length ? "" : "disabled"}>이번 추천 저장</button>
           <span class="stat-pill">기본 3세트 노출</span>
           <span class="stat-pill">강세·소외·구조 신호 재사용</span>
         </div>
+        ${recommendationSaveStatus ? `<p class="warning" style="margin-top:12px;">${recommendationSaveStatus}</p>` : ""}
         <div class="recommendation-list" style="margin-top:12px;">
           ${recommendations.length ? recommendations.map((recommendation) => `
             <article class="recommendation-card">
@@ -1325,7 +1545,12 @@
         ` : ""}
       `;
       document.querySelector("#generateButton").addEventListener("click", () => {
+        recommendationSaveStatus = "";
         appState = generateRecommendations(appState, drawData.draws);
+        renderApp(appState, drawData, currentLoadStatus);
+      });
+      document.querySelector("#saveRecommendationsButton").addEventListener("click", () => {
+        appState = saveCurrentRecommendations(appState, drawData);
         renderApp(appState, drawData, currentLoadStatus);
       });
     }
@@ -1546,6 +1771,7 @@
       renderLatest(data);
       renderBriefing(data, state);
       renderRecommendations(state, data);
+      renderRecommendationHistory(state);
       renderStats(data);
       renderFollowerStats(data);
       renderSignificancePanel(data);
@@ -1559,6 +1785,7 @@
 
       try {
         drawData = await loadDrawData();
+        appState = reconcileRecommendationHistoryWithDraws(appState, drawData.draws);
         if (drawData.draws.length > 0) {
           appState = generateRecommendations(appState, drawData.draws);
         }
@@ -1577,18 +1804,33 @@
       }
     }
 
+    function showView(viewName) {
+      const targetView = document.querySelector(`#${viewName}View`);
+      const targetButton = document.querySelector(`.tab-button[data-view="${viewName}"]`);
+      if (!targetView || !targetButton) return;
+
+      document.querySelectorAll(".tab-button").forEach((button) => {
+        const isActive = button === targetButton;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+      });
+      document.querySelectorAll(".view").forEach((view) => {
+        const isActive = view === targetView;
+        view.classList.toggle("active", isActive);
+        view.hidden = !isActive;
+      });
+    }
+
     document.querySelector("#refreshButton").addEventListener("click", loadAppData);
 
-    document.querySelectorAll(".tab-button").forEach((button) => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
-        document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-        button.classList.add("active");
-        document.querySelector(`#${button.dataset.view}View`).classList.add("active");
-      });
+    document.querySelector(".view-tabs").addEventListener("click", (event) => {
+      const button = event.target.closest(".tab-button");
+      if (!button) return;
+      showView(button.dataset.view);
     });
 
     document.addEventListener("DOMContentLoaded", () => {
+      showView(document.querySelector(".tab-button.active")?.dataset.view || "dashboard");
       renderApp(appState, drawData, currentLoadStatus);
       loadAppData();
     });
