@@ -500,6 +500,7 @@
   <script>
     const STORAGE_KEY = "lotto-dashboard:v1";
     const DATA_URL = "lotto-data.json";
+    const LSTM_URL = "lstm-prediction.json";
 
     const defaultState = {
       schemaVersion: 2,
@@ -527,6 +528,7 @@
       message: "lotto-data.json을 불러오는 중입니다."
     };
     let recommendationSaveStatus = "";
+    let lstmPrediction = null;
 
     function cloneDefaultState() {
       return JSON.parse(JSON.stringify(defaultState));
@@ -605,6 +607,43 @@
         latestRound: draws.reduce((max, draw) => Math.max(max, draw.round), 0),
         draws: draws.sort((a, b) => b.round - a.round)
       };
+    }
+
+    async function loadLstmPrediction() {
+      try {
+        const response = await fetch(LSTM_URL, { cache: "no-store" });
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (data.schemaVersion !== 1 || !Array.isArray(data.recommendations)) return null;
+
+        const recommendations = data.recommendations
+          .map((rec) => ({
+            method: String(rec.method || "lstm"),
+            numbers: Array.isArray(rec.numbers) ? rec.numbers.map(Number) : []
+          }))
+          .filter((rec) =>
+            rec.numbers.length === 6
+            && new Set(rec.numbers).size === 6
+            && rec.numbers.every((number) => Number.isInteger(number) && number >= 1 && number <= 45)
+          )
+          .map((rec) => ({ ...rec, numbers: [...rec.numbers].sort((a, b) => a - b) }));
+
+        if (recommendations.length === 0) return null;
+
+        return {
+          model: String(data.model || "lstm"),
+          sourceLatestRound: Number(data.sourceLatestRound || 0),
+          targetRound: Number(data.targetRound || 0),
+          trainedAt: data.trainedAt || null,
+          window: Number(data.window || 0),
+          topNumbers: Array.isArray(data.topNumbers) ? data.topNumbers : [],
+          recommendations,
+          warning: String(data.warning || "")
+        };
+      } catch (error) {
+        console.warn("lstm_prediction_load_failed", error);
+        return null;
+      }
     }
 
     function getBallClass(number) {
@@ -1509,6 +1548,46 @@
       `;
     }
 
+    function lstmMethodLabel(method) {
+      if (method === "lstm-top-probability") return "상위 확률 조합";
+      if (method === "lstm-weighted-sampling") return "확률 가중 샘플 조합";
+      return method;
+    }
+
+    function renderLstmRecommendations(prediction, data) {
+      if (!prediction || !prediction.recommendations.length) {
+        return `
+          <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px dashed var(--line);border-radius:12px;">
+            <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span></h3>
+            <p class="muted">학습 결과(lstm-prediction.json)가 아직 없습니다. 새 회차가 갱신되면 자동 생성됩니다.</p>
+          </div>`;
+      }
+
+      const isStale = Number(prediction.sourceLatestRound) !== Number(data.latestRound);
+      const trained = prediction.trainedAt ? formatDateTime(prediction.trainedAt) : "-";
+      const topNums = (prediction.topNumbers || [])
+        .slice(0, 6)
+        .map((item) => `${item.number}번 ${formatPercent(Number(item.probability) || 0)}`)
+        .join(", ");
+
+      return `
+        <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f0f6ff;${isStale ? "opacity:0.65;" : ""}">
+          <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span><span class="stat-pill">2세트</span></h3>
+          <p class="muted">학습 기준 ${prediction.sourceLatestRound}회 → 예측 대상 ${prediction.targetRound}회 · 학습 시각 ${trained} · 입력 ${prediction.window}회 시퀀스</p>
+          ${topNums ? `<p class="muted">상위 확률 번호: ${topNums}</p>` : ""}
+          ${isStale ? `<p class="warning">⚠ 데이터는 ${data.latestRound}회까지 갱신됐지만 학습은 ${prediction.sourceLatestRound}회 기준입니다. 재학습 대기 중이라 참고용입니다.</p>` : ""}
+          <div class="recommendation-list" style="margin-top:12px;">
+            ${prediction.recommendations.map((rec) => `
+              <article class="recommendation-card">
+                ${renderBalls(rec.numbers)}
+                <div class="stat-pills" style="margin-top:10px;"><span class="stat-pill">딥러닝</span><span class="stat-pill">${lstmMethodLabel(rec.method)}</span></div>
+              </article>
+            `).join("")}
+          </div>
+          <p class="warning" style="margin-top:12px;">${prediction.warning || "로또는 독립시행이므로 실험용이며 당첨 확률 상승을 의미하지 않습니다."}</p>
+        </div>`;
+    }
+
     function renderRecommendations(state, data) {
       const panel = document.querySelector("#recommendPanel");
       if (data.draws.length === 0) {
@@ -1522,8 +1601,11 @@
           <div>
             <h2>추천 번호</h2>
             <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 역대 1등 당첨번호 6개 조합과 완전히 같은 번호는 제외합니다.</p>
+            <p class="muted">딥러닝 실험 2세트 + 통계 추천 3세트, 총 5세트를 함께 제공합니다.</p>
           </div>
         </div>
+        ${renderLstmRecommendations(lstmPrediction, data)}
+        <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">3세트</span></h3>
         <div class="section-actions">
           <button id="generateButton" type="button">추천 새로 만들기</button>
           <button id="saveRecommendationsButton" class="ghost-button" type="button" ${recommendations.length ? "" : "disabled"}>이번 추천 저장</button>
@@ -1785,6 +1867,7 @@
 
       try {
         drawData = await loadDrawData();
+        lstmPrediction = await loadLstmPrediction();
         appState = reconcileRecommendationHistoryWithDraws(appState, drawData.draws);
         if (drawData.draws.length > 0) {
           appState = generateRecommendations(appState, drawData.draws);

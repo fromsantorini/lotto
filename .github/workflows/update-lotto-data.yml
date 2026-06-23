@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PYTHONHASHSEED: "42"
 
     steps:
       - name: Check out repository
@@ -26,17 +27,35 @@ jobs:
           node-version: "24"
 
       - name: Update lotto data
-        run: node tools/update-lotto-data.mjs
-
-      - name: Commit updated data
+        id: update
         run: |
+          node tools/update-lotto-data.mjs
           if git diff --quiet -- lotto-data.json; then
-            echo "No lotto data changes to commit."
-            exit 0
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No lotto data changes; skipping retrain."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set up Python
+        if: steps.update.outputs.changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install training dependencies
+        if: steps.update.outputs.changed == 'true'
+        run: pip install -r tools/requirements.txt
+
+      - name: Train LSTM and predict next round
+        if: steps.update.outputs.changed == 'true'
+        run: python tools/train-lstm-lotto.py
+
+      - name: Commit updated data and prediction
+        if: steps.update.outputs.changed == 'true'
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lotto-data.json
-          git commit -m "Update lotto data"
+          git add lotto-data.json lstm-prediction.json
+          git commit -m "Update lotto data and LSTM prediction"
           git push
