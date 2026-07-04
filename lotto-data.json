@@ -1,9 +1,25 @@
 {
   "schemaVersion": 1,
   "source": "incremental-official-lt645-result",
-  "updatedAt": "2026-06-27T19:42:59.143Z",
-  "latestRound": 1230,
+  "updatedAt": "2026-07-04T19:34:30.413Z",
+  "latestRound": 1231,
   "draws": [
+    {
+      "round": 1231,
+      "date": "2026-07-04",
+      "numbers": [
+        4,
+        13,
+        14,
+        18,
+        31,
+        38
+      ],
+      "bonus": 15,
+      "firstPrizeAmount": 1652990074,
+      "firstWinnerCount": 17,
+      "totalSellAmount": 59042291693
+    },
     {
       "round": 1230,
       "date": "2026-06-27",
