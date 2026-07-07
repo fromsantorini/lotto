@@ -100,6 +100,99 @@ def weighted_sampling_set(probs: np.ndarray, rng: np.random.Generator) -> list[i
     return sorted(int(i) + 1 for i in picks)
 
 
+# --- 통계 균형 추천 (기존 index.html 클라이언트 로직 포팅) ---------------------
+# 홀짝 2~4, 저고 2~4, 합계 90~180, 같은 끝수 최대 2개, 3연번 이상 금지,
+# 역대 1등 조합 제외. 강세 2 + 소외 2 + 중간 2 혼합.
+
+STAT_WINDOW = 100   # 강세/소외 판정에 쓰는 최근 회차 수
+STAT_SETS = 3
+
+
+def consecutive_runs(nums: list[int]) -> list[list[int]]:
+    runs: list[list[int]] = []
+    current = [nums[0]]
+    for prev, cur in zip(nums, nums[1:]):
+        if cur == prev + 1:
+            current.append(cur)
+        else:
+            if len(current) >= 2:
+                runs.append(current)
+            current = [cur]
+    if len(current) >= 2:
+        runs.append(current)
+    return runs
+
+
+def is_balanced(nums: list[int]) -> bool:
+    odd = sum(1 for n in nums if n % 2)
+    low = sum(1 for n in nums if n <= 22)
+    total = sum(nums)
+    digits = [n % 10 for n in nums]
+    max_same_ending = max(digits.count(d) for d in digits)
+    return (
+        2 <= odd <= 4
+        and 2 <= low <= 4
+        and 90 <= total <= 180
+        and max_same_ending <= 2
+        and all(len(run) <= 2 for run in consecutive_runs(nums))
+    )
+
+
+def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int = STAT_SETS) -> list[dict]:
+    """최근 STAT_WINDOW회차 빈도 기반 통계 균형 추천 count세트 생성 (draws는 오름차순)."""
+    recent = draws[-STAT_WINDOW:]
+    counts = {n: 0 for n in range(1, NUM_RANGE + 1)}
+    for d in recent:
+        for n in d["numbers"]:
+            counts[n] += 1
+    hot = sorted(counts, key=lambda n: (-counts[n], n))[:12]
+    cold = sorted(counts, key=lambda n: (counts[n], n))[:12]
+    middle = [n for n in range(1, NUM_RANGE + 1) if n not in hot and n not in cold]
+    historical = {tuple(d["numbers"]) for d in draws}
+
+    def pick_candidate() -> list[int]:
+        for _ in range(500):
+            cand = sorted(
+                int(n)
+                for group, k in ((hot, 2), (cold, 2), (middle, 2))
+                for n in rng.choice(group, size=k, replace=False)
+            )
+            if is_balanced(cand) and tuple(cand) not in historical:
+                return cand
+        for _ in range(500):  # 균형 조건을 만족 못 하면 역대 조합만 피한 대체 조합
+            cand = sorted(int(n) + 1 for n in rng.choice(NUM_RANGE, size=PICK, replace=False))
+            if tuple(cand) not in historical:
+                return cand
+        raise RuntimeError("no unique statistical recommendation available")
+
+    recs: list[dict] = []
+    seen: set[tuple[int, ...]] = set()
+    for _ in range(50):
+        if len(recs) >= count:
+            break
+        cand = pick_candidate()
+        key = tuple(cand)
+        if key in seen:
+            continue
+        seen.add(key)
+        odd = sum(1 for n in cand if n % 2)
+        low = sum(1 for n in cand if n <= 22)
+        recs.append(
+            {
+                "method": "balanced-statistical",
+                "numbers": cand,
+                "reason": {
+                    "oddEven": f"{odd}:{PICK - odd}",
+                    "lowHigh": f"{low}:{PICK - low}",
+                    "sum": sum(cand),
+                    "frequentNumbers": [n for n in cand if n in hot],
+                    "coldNumbers": [n for n in cand if n in cold],
+                },
+            }
+        )
+    return recs
+
+
 # --- 예측 이력(성적표) 관리 ---------------------------------------------------
 # lstm-prediction.json 은 매주 덮어써지므로, 회차별 예측과 실제 당첨 결과 대조를
 # lstm-prediction-history.json 에 누적한다. 학습과 같은 커밋으로 CI가 관리한다.
@@ -227,6 +320,21 @@ def selftest() -> int:
     future = reconcile_history(future, draws)
     assert next(e for e in future if e["targetRound"] == 101)["result"] is None
 
+    # 통계 추천: 3세트, 유효성, 재현성
+    rng_a = np.random.default_rng(SEED)
+    fake_draws = [
+        {"round": r, "numbers": sorted(int(n) + 1 for n in rng_a.choice(45, size=6, replace=False))}
+        for r in range(1, 121)
+    ]
+    recs_a = stat_recommendations(fake_draws, np.random.default_rng(7))
+    recs_b = stat_recommendations(fake_draws, np.random.default_rng(7))
+    assert len(recs_a) == STAT_SETS
+    for rec in recs_a:
+        nums = rec["numbers"]
+        assert len(nums) == 6 and len(set(nums)) == 6 and all(1 <= n <= 45 for n in nums), nums
+    assert recs_a == recs_b, "stat recommendations must be reproducible with same rng"
+    assert len({tuple(r["numbers"]) for r in recs_a}) == STAT_SETS, "sets must be unique"
+
     print("selftest ok")
     return 0
 
@@ -308,6 +416,7 @@ def main() -> int:
                 "method": "lstm-weighted-sampling",
                 "numbers": weighted_sampling_set(probs, rng),
             },
+            *stat_recommendations(draws, rng),
         ],
         "warning": WARNING,
     }

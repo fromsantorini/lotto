@@ -71,6 +71,78 @@
         39,
         44
       ]
+    },
+    {
+      "method": "balanced-statistical",
+      "numbers": [
+        4,
+        10,
+        22,
+        27,
+        35,
+        37
+      ],
+      "reason": {
+        "oddEven": "3:3",
+        "lowHigh": "3:3",
+        "sum": 135,
+        "frequentNumbers": [
+          27,
+          37
+        ],
+        "coldNumbers": [
+          10,
+          22
+        ]
+      }
+    },
+    {
+      "method": "balanced-statistical",
+      "numbers": [
+        2,
+        10,
+        15,
+        33,
+        36,
+        37
+      ],
+      "reason": {
+        "oddEven": "3:3",
+        "lowHigh": "3:3",
+        "sum": 133,
+        "frequentNumbers": [
+          15,
+          37
+        ],
+        "coldNumbers": [
+          2,
+          10
+        ]
+      }
+    },
+    {
+      "method": "balanced-statistical",
+      "numbers": [
+        8,
+        11,
+        14,
+        24,
+        35,
+        37
+      ],
+      "reason": {
+        "oddEven": "3:3",
+        "lowHigh": "3:3",
+        "sum": 129,
+        "frequentNumbers": [
+          8,
+          37
+        ],
+        "coldNumbers": [
+          11,
+          14
+        ]
+      }
     }
   ],
   "warning": "로또는 독립시행이므로 이 결과는 실험용이며 당첨 확률 상승을 의미하지 않습니다. 딥러닝 출력은 과거 빈도 통계와 통계적으로 구분되지 않습니다."
