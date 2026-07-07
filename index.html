@@ -529,7 +529,6 @@
       title: "데이터 준비",
       message: "lotto-data.json을 불러오는 중입니다."
     };
-    let recommendationSaveStatus = "";
     let lstmPrediction = null;
     let lstmHistory = [];
 
@@ -832,25 +831,61 @@
       };
     }
 
-    function generateRecommendations(state, draws) {
-      const stats = calculateStats(draws, state.preferences.statWindow);
-      const historicalCombinations = createHistoricalCombinationSet(draws);
+    function ensureRecommendationBatch(state, data) {
+      if (!data.draws.length || !data.latestRound) return state;
+      const targetRound = data.latestRound + 1;
+
+      // 이번 대상 회차의 추천이 이미 저장돼 있으면 그대로 복원 (새로고침해도 동일 유지)
+      const saved = state.savedRecommendationHistory.filter((entry) => Number(entry.targetRound) === targetRound);
+      if (saved.length) {
+        return saveState({
+          ...state,
+          recommendations: saved.slice(0, state.preferences.recommendationCount).map((entry) => ({
+            createdAt: entry.createdAt,
+            method: entry.method,
+            numbers: entry.numbers,
+            reason: entry.reason
+          }))
+        });
+      }
+
+      // 없으면 회차당 한 번만 생성하고 즉시 이력에 저장
+      const stats = calculateStats(data.draws, state.preferences.statWindow);
+      const historicalCombinations = createHistoricalCombinationSet(data.draws);
       const count = state.preferences.recommendationCount;
       const keys = new Set();
-      const nextRecommendations = [];
+      const recommendations = [];
 
-      while (nextRecommendations.length < count && keys.size < 100) {
+      for (let attempt = 0; attempt < 50 && recommendations.length < count; attempt += 1) {
         const recommendation = makeRecommendation(stats, historicalCombinations);
         const key = combinationKey(recommendation.numbers);
         if (!keys.has(key)) {
           keys.add(key);
-          nextRecommendations.push(recommendation);
+          recommendations.push(recommendation);
         }
       }
 
+      const batchId = `batch-${Date.now()}-${targetRound}`;
+      const createdAt = new Date().toISOString();
+      const entries = recommendations.map((recommendation) => ({
+        id: createRecommendationHistoryId(batchId, recommendation.numbers),
+        batchId,
+        createdAt,
+        baseRound: data.latestRound,
+        targetRound,
+        numbers: [...recommendation.numbers].sort((a, b) => a - b),
+        method: recommendation.method,
+        reason: recommendation.reason,
+        status: "pending"
+      }));
+
       return saveState({
         ...state,
-        recommendations: nextRecommendations
+        recommendations,
+        savedRecommendationHistory: [
+          ...entries,
+          ...state.savedRecommendationHistory
+        ].slice(0, getRecommendationHistoryLimit())
       });
     }
 
@@ -860,34 +895,6 @@
 
     function getRecommendationHistoryLimit() {
       return 30;
-    }
-
-    function saveCurrentRecommendations(state, data) {
-      const recommendations = state.recommendations.slice(0, state.preferences.recommendationCount);
-      if (!recommendations.length || !data.latestRound) return state;
-
-      const batchId = `batch-${Date.now()}-${data.latestRound + 1}`;
-      const createdAt = new Date().toISOString();
-      const nextEntries = recommendations.map((recommendation) => ({
-        id: createRecommendationHistoryId(batchId, recommendation.numbers),
-        batchId,
-        createdAt,
-        baseRound: data.latestRound,
-        targetRound: data.latestRound + 1,
-        numbers: [...recommendation.numbers].sort((a, b) => a - b),
-        method: recommendation.method,
-        reason: recommendation.reason,
-        status: "pending"
-      }));
-
-      recommendationSaveStatus = `다음 회차(${data.latestRound + 1}회) 결과 확인용으로 저장했습니다.`;
-      return saveState({
-        ...state,
-        savedRecommendationHistory: [
-          ...nextEntries,
-          ...state.savedRecommendationHistory
-        ].slice(0, getRecommendationHistoryLimit())
-      });
     }
 
     function calculateRecommendationMatch(numbers, draw) {
@@ -1503,7 +1510,7 @@
           <div class="section-head">
             <div>
               <h2>지난 추천 결과</h2>
-              <p class="muted">아직 저장한 추천이 없습니다. 이번 주 추천을 저장해 두면 다음 회차 결과가 나오면 여기서 바로 확인할 수 있습니다.</p>
+              <p class="muted">아직 저장된 추천이 없습니다. 데이터가 로드되면 이번 회차 추천이 자동 생성·저장되고, 다음 회차 결과가 나오면 여기서 바로 채점됩니다.</p>
             </div>
           </div>
         `;
@@ -1515,7 +1522,7 @@
         <div class="section-head">
           <div>
             <h2>지난 추천 결과</h2>
-            <p class="muted">저장한 추천 번호를 다음 회차 결과와 자동으로 맞춰 보여줍니다. 이 기록은 현재 브라우저에 저장됩니다.</p>
+            <p class="muted">매주 자동 저장된 추천 번호를 다음 회차 결과와 자동으로 맞춰 보여줍니다. 이 기록은 현재 브라우저에 저장됩니다.</p>
           </div>
         </div>
         <div class="history-batch-list">
@@ -1778,14 +1785,8 @@
           </div>
         </div>
         ${renderLstmRecommendations(lstmPrediction, data)}
-        <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">3세트</span></h3>
-        <div class="section-actions">
-          <button id="generateButton" type="button">추천 새로 만들기</button>
-          <button id="saveRecommendationsButton" class="ghost-button" type="button" ${recommendations.length ? "" : "disabled"}>이번 추천 저장</button>
-          <span class="stat-pill">기본 3세트 노출</span>
-          <span class="stat-pill">강세·소외·구조 신호 재사용</span>
-        </div>
-        ${recommendationSaveStatus ? `<p class="warning" style="margin-top:12px;">${recommendationSaveStatus}</p>` : ""}
+        <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">3세트</span><span class="stat-pill">${data.latestRound + 1}회 대상</span></h3>
+        <p class="muted">새 회차 데이터가 갱신될 때마다 회차당 한 번 자동 생성·저장되고, 다음 회차 결과가 나오면 아래 "지난 추천 결과"에서 자동으로 채점됩니다.</p>
         <div class="recommendation-list" style="margin-top:12px;">
           ${recommendations.length ? recommendations.map((recommendation) => `
             <article class="recommendation-card">
@@ -1799,15 +1800,6 @@
           <p class="warning" style="margin-top:12px;">이번에는 충분한 고유 조합을 모두 만들지 못했습니다. 가능한 조합부터 먼저 보여주고 있습니다.</p>
         ` : ""}
       `;
-      document.querySelector("#generateButton").addEventListener("click", () => {
-        recommendationSaveStatus = "";
-        appState = generateRecommendations(appState, drawData.draws);
-        renderApp(appState, drawData, currentLoadStatus);
-      });
-      document.querySelector("#saveRecommendationsButton").addEventListener("click", () => {
-        appState = saveCurrentRecommendations(appState, drawData);
-        renderApp(appState, drawData, currentLoadStatus);
-      });
     }
 
     function renderMiniBars(items, max, labeler) {
@@ -2078,9 +2070,7 @@
         lstmPrediction = await loadLstmPrediction();
         lstmHistory = await loadLstmHistory();
         appState = reconcileRecommendationHistoryWithDraws(appState, drawData.draws);
-        if (drawData.draws.length > 0) {
-          appState = generateRecommendations(appState, drawData.draws);
-        }
+        appState = ensureRecommendationBatch(appState, drawData);
         renderApp(appState, drawData, {
           title: "데이터 로드 완료",
           message: `${drawData.draws.length}개 회차를 불러왔습니다.`
