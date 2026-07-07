@@ -30,6 +30,8 @@ MIN_TRAIN_SAMPLES = 50  # 이보다 적으면 학습 의미가 없어 중단
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "lotto-data.json"
 OUT_PATH = ROOT / "lstm-prediction.json"
+HISTORY_PATH = ROOT / "lstm-prediction-history.json"
+HISTORY_LIMIT = 200  # 이력 최대 보관 회차 수
 
 MODEL_NAME = "keras-lstm-multihot-v2"
 WARNING = (
@@ -51,7 +53,15 @@ def load_draws(path: Path) -> list[dict]:
             continue
         if any(n < 1 or n > NUM_RANGE for n in nums):
             continue
-        draws.append({"round": int(d["round"]), "numbers": sorted(nums)})
+        bonus = d.get("bonus")
+        draws.append(
+            {
+                "round": int(d["round"]),
+                "numbers": sorted(nums),
+                "date": str(d.get("date", "")),
+                "bonus": int(bonus) if isinstance(bonus, (int, float)) and 1 <= int(bonus) <= NUM_RANGE else None,
+            }
+        )
 
     if not draws:
         raise ValueError("no valid draws in lotto-data.json")
@@ -90,12 +100,147 @@ def weighted_sampling_set(probs: np.ndarray, rng: np.random.Generator) -> list[i
     return sorted(int(i) + 1 for i in picks)
 
 
+# --- 예측 이력(성적표) 관리 ---------------------------------------------------
+# lstm-prediction.json 은 매주 덮어써지므로, 회차별 예측과 실제 당첨 결과 대조를
+# lstm-prediction-history.json 에 누적한다. 학습과 같은 커밋으로 CI가 관리한다.
+
+
+def load_history(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    if raw.get("schemaVersion") == 1 and isinstance(raw.get("entries"), list):
+        return [e for e in raw["entries"] if isinstance(e.get("targetRound"), int)]
+    return []
+
+
+def prediction_to_entry(pred: dict) -> dict | None:
+    if not isinstance(pred.get("targetRound"), int):
+        return None
+    recs = pred.get("recommendations")
+    if not isinstance(recs, list) or not recs:
+        return None
+    return {
+        "targetRound": pred["targetRound"],
+        "sourceLatestRound": pred.get("sourceLatestRound"),
+        "trainedAt": pred.get("trainedAt"),
+        "recommendations": recs,
+        "result": None,
+    }
+
+
+def upsert_entry(entries: list[dict], entry: dict, replace: bool) -> list[dict]:
+    """같은 targetRound 항목이 있으면 replace 여부에 따라 교체하거나 유지."""
+    exists = any(e["targetRound"] == entry["targetRound"] for e in entries)
+    if exists and not replace:
+        return entries
+    kept = [e for e in entries if e["targetRound"] != entry["targetRound"]]
+    return kept + [entry]
+
+
+def reconcile_history(entries: list[dict], draws: list[dict]) -> list[dict]:
+    """결과 미확정 항목을 실제 당첨번호와 대조해 적중 개수를 기록."""
+    by_round = {d["round"]: d for d in draws}
+    for entry in entries:
+        if entry.get("result"):
+            continue
+        draw = by_round.get(entry["targetRound"])
+        if not draw:
+            continue
+        winning = set(draw["numbers"])
+        bonus = draw.get("bonus")
+        entry["result"] = {
+            "date": draw.get("date", ""),
+            "winningNumbers": draw["numbers"],
+            "bonus": bonus,
+            "matches": [
+                {
+                    "method": rec.get("method", ""),
+                    "matchCount": len(winning & set(rec.get("numbers", []))),
+                    "bonusMatched": bonus is not None
+                    and bonus in rec.get("numbers", [])
+                    and len(winning & set(rec.get("numbers", []))) < PICK,
+                }
+                for rec in entry.get("recommendations", [])
+            ],
+        }
+    return entries
+
+
+def save_history(path: Path, entries: list[dict]) -> None:
+    entries = sorted(entries, key=lambda e: e["targetRound"], reverse=True)[:HISTORY_LIMIT]
+    path.write_text(
+        json.dumps({"schemaVersion": 1, "entries": entries}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def update_history(new_prediction: dict, draws: list[dict]) -> None:
+    entries = load_history(HISTORY_PATH)
+
+    # 덮어쓰기 전의 기존 예측이 이력에 없으면 보존 (최초 부트스트랩용)
+    if OUT_PATH.exists():
+        try:
+            prev = prediction_to_entry(json.loads(OUT_PATH.read_text(encoding="utf-8")))
+            if prev:
+                entries = upsert_entry(entries, prev, replace=False)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    entries = upsert_entry(entries, prediction_to_entry(new_prediction), replace=True)
+    entries = reconcile_history(entries, draws)
+    save_history(HISTORY_PATH, entries)
+
+
+def selftest() -> int:
+    """TF 없이 이력 로직만 검증하는 자체 점검."""
+    draws = [
+        {"round": 100, "numbers": [1, 2, 3, 4, 5, 6], "date": "2026-01-03", "bonus": 7},
+    ]
+    pred_99 = {
+        "targetRound": 100,
+        "sourceLatestRound": 99,
+        "trainedAt": "t0",
+        "recommendations": [{"method": "m", "numbers": [1, 2, 3, 10, 11, 7]}],
+    }
+    entries = upsert_entry([], prediction_to_entry(pred_99), replace=True)
+    assert len(entries) == 1
+
+    # 같은 회차 재학습 시 교체, replace=False 면 유지
+    entries = upsert_entry(entries, prediction_to_entry({**pred_99, "trainedAt": "t1"}), replace=True)
+    assert len(entries) == 1 and entries[0]["trainedAt"] == "t1"
+    entries = upsert_entry(entries, prediction_to_entry({**pred_99, "trainedAt": "t2"}), replace=False)
+    assert entries[0]["trainedAt"] == "t1"
+
+    entries = reconcile_history(entries, draws)
+    match = entries[0]["result"]["matches"][0]
+    assert match["matchCount"] == 3, match
+    assert match["bonusMatched"] is True, match
+
+    # 이미 채점된 항목은 다시 채점하지 않음 / 미추첨 회차는 result 없음
+    entries = reconcile_history(entries, draws)
+    assert entries[0]["result"]["matches"][0]["matchCount"] == 3
+    future = upsert_entry(entries, prediction_to_entry({**pred_99, "targetRound": 101}), replace=True)
+    future = reconcile_history(future, draws)
+    assert next(e for e in future if e["targetRound"] == 101)["result"] is None
+
+    print("selftest ok")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="LSTM 로또 실험 학습/예측")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
+    parser.add_argument("--selftest", action="store_true", help="이력 로직만 검증 (TF 불필요)")
     args = parser.parse_args()
+
+    if args.selftest:
+        return selftest()
 
     # --- 재현성: numpy / python / tensorflow 시드 고정 ---
     import tensorflow as tf
@@ -167,6 +312,7 @@ def main() -> int:
         "warning": WARNING,
     }
 
+    update_history(result, draws)  # OUT_PATH 덮어쓰기 전에 기존 예측을 이력에 보존
     OUT_PATH.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

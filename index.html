@@ -484,6 +484,7 @@
       <section id="briefingPanel" class="panel briefing-panel"></section>
       <section id="recommendPanel" class="panel"></section>
       <section id="recommendHistoryPanel" class="panel"></section>
+      <section id="lstmScorePanel" class="panel"></section>
     </div>
 
     <div id="statsView" class="view">
@@ -501,6 +502,7 @@
     const STORAGE_KEY = "lotto-dashboard:v1";
     const DATA_URL = "lotto-data.json";
     const LSTM_URL = "lstm-prediction.json";
+    const LSTM_HISTORY_URL = "lstm-prediction-history.json";
 
     const defaultState = {
       schemaVersion: 2,
@@ -529,6 +531,7 @@
     };
     let recommendationSaveStatus = "";
     let lstmPrediction = null;
+    let lstmHistory = [];
 
     function cloneDefaultState() {
       return JSON.parse(JSON.stringify(defaultState));
@@ -643,6 +646,21 @@
       } catch (error) {
         console.warn("lstm_prediction_load_failed", error);
         return null;
+      }
+    }
+
+    async function loadLstmHistory() {
+      try {
+        const response = await fetch(LSTM_HISTORY_URL, { cache: "no-store" });
+        if (!response.ok) return [];
+        const data = await response.json();
+        if (data.schemaVersion !== 1 || !Array.isArray(data.entries)) return [];
+        return data.entries
+          .filter((entry) => Number.isInteger(entry.targetRound) && Array.isArray(entry.recommendations))
+          .sort((a, b) => b.targetRound - a.targetRound);
+      } catch (error) {
+        console.warn("lstm_history_load_failed", error);
+        return [];
       }
     }
 
@@ -1237,6 +1255,82 @@
       };
     }
 
+    function analyzeCarryOver(draws) {
+      const byRound = new Map(draws.map((draw) => [draw.round, draw]));
+      const distribution = [0, 0, 0, 0]; // 겹침 0개 / 1개 / 2개 / 3개 이상
+      let baseCount = 0;
+      let overlapTotal = 0;
+
+      draws.forEach((draw) => {
+        const prev = byRound.get(draw.round - 1);
+        if (!prev) return;
+        baseCount += 1;
+        const overlap = draw.numbers.filter((number) => prev.numbers.includes(number)).length;
+        overlapTotal += overlap;
+        distribution[Math.min(overlap, 3)] += 1;
+      });
+
+      // 이론값: 직전 회차 6개 중 하나 이상이 다시 나올 확률 = 1 - C(39,6)/C(45,6)
+      const expectedAtLeastOneRate = 1 - (39 * 38 * 37 * 36 * 35 * 34) / (45 * 44 * 43 * 42 * 41 * 40);
+      return {
+        baseCount,
+        averageOverlap: baseCount ? overlapTotal / baseCount : 0,
+        atLeastOneRate: baseCount ? (baseCount - distribution[0]) / baseCount : 0,
+        expectedAtLeastOneRate,
+        distribution,
+        latestNumbers: draws[0] ? draws[0].numbers : []
+      };
+    }
+
+    const NUMBER_ZONES = [[1, 10], [11, 20], [21, 30], [31, 40], [41, 45]];
+
+    function analyzeZoneDistribution(draws, recentLimit = 20) {
+      const recentDraws = draws.slice(0, recentLimit);
+      const countZones = (list) => {
+        const counts = NUMBER_ZONES.map(() => 0);
+        list.forEach((draw) => draw.numbers.forEach((number) => {
+          counts[NUMBER_ZONES.findIndex(([low, high]) => number >= low && number <= high)] += 1;
+        }));
+        return counts;
+      };
+      const overallCounts = countZones(draws);
+      const recentCounts = countZones(recentDraws);
+
+      return {
+        recentLimit: recentDraws.length,
+        zones: NUMBER_ZONES.map(([low, high], index) => ({
+          label: `${low}~${high}`,
+          expectedPerDraw: (6 * (high - low + 1)) / 45,
+          overallPerDraw: draws.length ? overallCounts[index] / draws.length : 0,
+          recentPerDraw: recentDraws.length ? recentCounts[index] / recentDraws.length : 0
+        }))
+      };
+    }
+
+    function analyzeNumberGaps(draws) {
+      const latestRound = draws[0] ? draws[0].round : 0;
+      const lastSeen = new Map();
+      draws.forEach((draw) => {
+        draw.numbers.forEach((number) => {
+          if (!lastSeen.has(number)) lastSeen.set(number, draw.round);
+        });
+      });
+
+      const gaps = Array.from({ length: 45 }, (_, index) => {
+        const number = index + 1;
+        const seenRound = lastSeen.get(number);
+        return {
+          number,
+          gap: seenRound === undefined ? draws.length : latestRound - seenRound
+        };
+      });
+
+      return {
+        averageExpectedGap: 45 / 6,
+        longestAbsent: [...gaps].sort((a, b) => b.gap - a.gap || a.number - b.number).slice(0, 10)
+      };
+    }
+
     function findStatisticalPatterns(draws) {
       return {
         numberFrequency: analyzeNumberFrequencySignificance(draws).slice(0, 12),
@@ -1244,7 +1338,10 @@
         structural: analyzeStructuralPatterns(draws),
         lastDigits: analyzeLastDigitPatterns(draws),
         consecutive: analyzeConsecutivePatterns(draws),
-        neighborFollowers: analyzeNeighborFollowers(draws)
+        neighborFollowers: analyzeNeighborFollowers(draws),
+        carryOver: analyzeCarryOver(draws),
+        zoneDistribution: analyzeZoneDistribution(draws),
+        numberGaps: analyzeNumberGaps(draws)
       };
     }
 
@@ -1462,6 +1559,82 @@
                     `;
                   }).join("")}
                 </div>
+              </section>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderLstmScoreboard(entries) {
+      const panel = document.querySelector("#lstmScorePanel");
+      if (!entries.length) {
+        panel.innerHTML = `
+          <div class="section-head">
+            <div>
+              <h2>딥러닝 성적표</h2>
+              <p class="muted">아직 누적된 딥러닝 예측 이력이 없습니다. 매주 재학습이 돌면 회차별 예측과 실제 결과 대조가 여기에 쌓입니다.</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
+      const allMatches = scored.flatMap((entry) => entry.result.matches);
+      const averageMatch = allMatches.length
+        ? allMatches.reduce((total, match) => total + match.matchCount, 0) / allMatches.length
+        : 0;
+      const bestMatch = allMatches.reduce((best, match) => Math.max(best, match.matchCount), 0);
+
+      panel.innerHTML = `
+        <div class="section-head">
+          <div>
+            <h2>딥러닝 성적표</h2>
+            <p class="muted">매주 재학습된 LSTM 예측을 회차별로 누적하고, 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다. 평균이 이 근처에 머무는 것이 정상이며, 딥러닝이 우연보다 낫지 않다는 사실을 그대로 보여주는 패널입니다.</p>
+          </div>
+        </div>
+        <div class="stat-pills" style="margin-bottom:12px;">
+          <span class="stat-pill">채점 완료 ${scored.length}회차 · ${allMatches.length}세트</span>
+          <span class="stat-pill">세트 평균 적중 ${averageMatch.toFixed(2)}개</span>
+          <span class="stat-pill">이론 기대값 0.80개</span>
+          ${allMatches.length ? `<span class="stat-pill">최고 기록 ${bestMatch}개 일치</span>` : ""}
+        </div>
+        <div class="history-batch-list">
+          ${entries.slice(0, 20).map((entry) => {
+            const result = entry.result;
+            return `
+              <section class="history-batch">
+                <div class="history-batch-head">
+                  <div>
+                    <h3>${entry.targetRound}회 예측 (학습 기준 ${entry.sourceLatestRound || "-"}회)</h3>
+                    <p class="muted">${result ? "채점 완료" : `${entry.targetRound}회 발표 전 · 결과 대기`}</p>
+                  </div>
+                  ${entry.trainedAt ? `<span class="stat-pill">${formatDateTime(entry.trainedAt)} 학습</span>` : ""}
+                </div>
+                <div class="recommendation-list">
+                  ${entry.recommendations.map((rec, index) => {
+                    const match = result && result.matches[index] ? result.matches[index] : null;
+                    return `
+                      <article class="recommendation-card">
+                        ${renderBalls(rec.numbers)}
+                        <div class="stat-pills" style="margin-top:10px;">
+                          <span class="stat-pill">${lstmMethodLabel(rec.method)}</span>
+                          ${match
+                            ? `<span class="stat-pill">${match.matchCount}개 일치${match.bonusMatched ? " + 보너스" : ""}</span>
+                               <span class="stat-pill">${getPrizeTier(match.matchCount, match.bonusMatched)}</span>`
+                            : `<span class="stat-pill">결과 대기</span>`}
+                        </div>
+                      </article>
+                    `;
+                  }).join("")}
+                </div>
+                ${result ? `
+                  <div class="history-draw">
+                    <p class="muted" style="margin:0 0 10px;">실제 당첨 번호 (${entry.targetRound}회${result.date ? ` · ${result.date}` : ""})</p>
+                    ${renderBalls(result.winningNumbers, result.bonus)}
+                  </div>
+                ` : ""}
               </section>
             `;
           }).join("")}
@@ -1794,6 +1967,40 @@
             <p>연번 포함률 ${formatPercent(patterns.structural.consecutiveRate)}</p>
           </div>
         </div>
+        <div class="grid" style="margin-top:12px;">
+          <div class="metric">
+            <h3>이월수 (직전 회차 재출현)</h3>
+            <p>직전 회차 번호가 1개 이상 다시 나온 회차: ${formatPercent(patterns.carryOver.atLeastOneRate)} (이론값 ${formatPercent(patterns.carryOver.expectedAtLeastOneRate)})</p>
+            <p>평균 겹침 개수: ${patterns.carryOver.averageOverlap.toFixed(2)}개 (이론값 0.80개)</p>
+            <p>분포: 0개 ${patterns.carryOver.distribution[0]}회 · 1개 ${patterns.carryOver.distribution[1]}회 · 2개 ${patterns.carryOver.distribution[2]}회 · 3개 이상 ${patterns.carryOver.distribution[3]}회</p>
+            ${patterns.carryOver.latestNumbers.length ? `
+              <p class="muted" style="margin-top:10px;">이번 주 이월 후보 (최신 회차 번호)</p>
+              ${renderBalls(patterns.carryOver.latestNumbers)}
+            ` : ""}
+          </div>
+          <div class="metric">
+            <h3>구간 분포</h3>
+            <div class="mini-bars">${patterns.zoneDistribution.zones.map((zone) => `
+              <div class="mini-bar">
+                <strong>${zone.label}</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (zone.recentPerDraw / 6) * 100 * 3)}%"></div></div>
+                <span>최근 평균 ${zone.recentPerDraw.toFixed(2)}개 · 전체 ${zone.overallPerDraw.toFixed(2)}개 · 이론 ${zone.expectedPerDraw.toFixed(2)}개</span>
+              </div>
+            `).join("")}</div>
+            <p class="muted">회차당 6개 번호가 각 구간에 평균 몇 개씩 나왔는지 봅니다. 최근은 ${patterns.zoneDistribution.recentLimit}회 기준입니다.</p>
+          </div>
+          <div class="metric">
+            <h3>미출현 기간</h3>
+            <div class="mini-bars">${patterns.numberGaps.longestAbsent.map((item) => `
+              <div class="mini-bar">
+                <strong>${item.number}번</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (item.gap / 30) * 100)}%"></div></div>
+                <span>${item.gap}회째 미출현</span>
+              </div>
+            `).join("")}</div>
+            <p class="muted">이론상 한 번호의 평균 재출현 주기는 ${patterns.numberGaps.averageExpectedGap.toFixed(1)}회입니다. 오래 안 나온 번호가 다음에 나올 확률이 높아지는 것은 아닙니다.</p>
+          </div>
+        </div>
       `;
     }
 
@@ -1854,6 +2061,7 @@
       renderBriefing(data, state);
       renderRecommendations(state, data);
       renderRecommendationHistory(state);
+      renderLstmScoreboard(lstmHistory);
       renderStats(data);
       renderFollowerStats(data);
       renderSignificancePanel(data);
@@ -1868,6 +2076,7 @@
       try {
         drawData = await loadDrawData();
         lstmPrediction = await loadLstmPrediction();
+        lstmHistory = await loadLstmHistory();
         appState = reconcileRecommendationHistoryWithDraws(appState, drawData.draws);
         if (drawData.draws.length > 0) {
           appState = generateRecommendations(appState, drawData.draws);
