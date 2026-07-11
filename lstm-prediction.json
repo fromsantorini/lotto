@@ -1,70 +1,70 @@
 {
   "schemaVersion": 1,
   "model": "keras-lstm-multihot-v2",
-  "sourceLatestRound": 1231,
-  "targetRound": 1232,
-  "trainedAt": "2026-07-04T19:34:58Z",
+  "sourceLatestRound": 1232,
+  "targetRound": 1233,
+  "trainedAt": "2026-07-11T16:26:42Z",
   "window": 10,
-  "epochs": 12,
-  "trainSampleCount": 1221,
+  "epochs": 14,
+  "trainSampleCount": 1222,
   "topNumbers": [
     {
+      "number": 38,
+      "probability": 0.1773
+    },
+    {
+      "number": 12,
+      "probability": 0.1743
+    },
+    {
+      "number": 3,
+      "probability": 0.1714
+    },
+    {
       "number": 13,
-      "probability": 0.1702
+      "probability": 0.1662
+    },
+    {
+      "number": 34,
+      "probability": 0.1589
     },
     {
       "number": 11,
-      "probability": 0.162
+      "probability": 0.1587
     },
     {
-      "number": 28,
-      "probability": 0.1559
+      "number": 14,
+      "probability": 0.1572
     },
     {
-      "number": 1,
-      "probability": 0.1515
+      "number": 20,
+      "probability": 0.1568
     },
     {
-      "number": 39,
-      "probability": 0.1503
+      "number": 33,
+      "probability": 0.1556
     },
     {
-      "number": 37,
-      "probability": 0.1497
-    },
-    {
-      "number": 26,
-      "probability": 0.1492
-    },
-    {
-      "number": 24,
-      "probability": 0.1489
-    },
-    {
-      "number": 6,
-      "probability": 0.1475
-    },
-    {
-      "number": 38,
-      "probability": 0.1449
+      "number": 43,
+      "probability": 0.1556
     }
   ],
   "recommendations": [
     {
       "method": "lstm-top-probability",
       "numbers": [
-        1,
+        3,
         11,
+        12,
         13,
-        28,
-        37,
-        39
+        34,
+        38
       ]
     },
     {
       "method": "lstm-weighted-sampling",
       "numbers": [
-        5,
+        4,
         20,
         32,
         36,
@@ -75,23 +75,23 @@
     {
       "method": "balanced-statistical",
       "numbers": [
-        4,
-        10,
+        7,
+        11,
         22,
-        27,
-        35,
-        37
+        26,
+        37,
+        39
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "4:2",
         "lowHigh": "3:3",
-        "sum": 135,
+        "sum": 142,
         "frequentNumbers": [
-          27,
+          7,
           37
         ],
         "coldNumbers": [
-          10,
+          11,
           22
         ]
       }
@@ -99,48 +99,48 @@
     {
       "method": "balanced-statistical",
       "numbers": [
-        2,
-        10,
+        9,
         15,
-        33,
-        36,
-        37
+        18,
+        22,
+        30,
+        39
       ],
       "reason": {
         "oddEven": "3:3",
-        "lowHigh": "3:3",
+        "lowHigh": "4:2",
         "sum": 133,
         "frequentNumbers": [
-          15,
-          37
+          9,
+          15
         ],
         "coldNumbers": [
-          2,
-          10
+          18,
+          22
         ]
       }
     },
     {
       "method": "balanced-statistical",
       "numbers": [
-        8,
-        11,
-        14,
-        24,
-        35,
-        37
+        3,
+        22,
+        25,
+        32,
+        37,
+        44
       ],
       "reason": {
         "oddEven": "3:3",
-        "lowHigh": "3:3",
-        "sum": 129,
+        "lowHigh": "2:4",
+        "sum": 163,
         "frequentNumbers": [
-          8,
+          3,
           37
         ],
         "coldNumbers": [
-          11,
-          14
+          22,
+          32
         ]
       }
     }
