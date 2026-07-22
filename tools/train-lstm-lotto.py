@@ -33,6 +33,11 @@ OUT_PATH = ROOT / "lstm-prediction.json"
 HISTORY_PATH = ROOT / "lstm-prediction-history.json"
 HISTORY_LIMIT = 200  # 이력 최대 보관 회차 수
 
+NEGATIVES_PER_POSITIVE = 5
+INFERENCE_CANDIDATES = 50_000
+VALIDATION_FRACTION = 0.1
+MAX_CANDIDATE_ATTEMPT_FACTOR = 100
+
 MODEL_NAME = "keras-lstm-multihot-v2"
 WARNING = (
     "로또는 독립시행이므로 이 결과는 실험용이며 당첨 확률 상승을 의미하지 않습니다. "
@@ -135,6 +140,58 @@ def is_balanced(nums: list[int]) -> bool:
         and 90 <= total <= 180
         and max_same_ending <= 2
         and all(len(run) <= 2 for run in consecutive_runs(nums))
+    )
+
+
+def multihot_to_numbers(vector: np.ndarray) -> list[int]:
+    return [int(i) + 1 for i in np.flatnonzero(vector)]
+
+
+def generate_balanced_candidates(
+    rng: np.random.Generator,
+    count: int,
+    forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
+) -> list[list[int]]:
+    candidates: set[tuple[int, ...]] = set()
+    for _ in range(count * MAX_CANDIDATE_ATTEMPT_FACTOR):
+        numbers = tuple(
+            sorted(int(i) + 1 for i in rng.choice(NUM_RANGE, PICK, replace=False))
+        )
+        if numbers not in forbidden and is_balanced(list(numbers)):
+            candidates.add(numbers)
+            if len(candidates) == count:
+                return [list(candidate) for candidate in sorted(candidates)]
+    raise RuntimeError(f"balanced candidate shortage: {len(candidates)} < {count}")
+
+
+def expand_scorer_examples(
+    sequences: np.ndarray,
+    positives: np.ndarray,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    sequence_examples: list[np.ndarray] = []
+    candidate_examples: list[np.ndarray] = []
+    labels: list[float] = []
+
+    for sequence, positive in zip(sequences, positives):
+        positive_numbers = multihot_to_numbers(positive)
+        negatives = generate_balanced_candidates(
+            rng,
+            NEGATIVES_PER_POSITIVE,
+            {tuple(positive_numbers)},
+        )
+        for numbers, label in [
+            (positive_numbers, 1.0),
+            *((numbers, 0.0) for numbers in negatives),
+        ]:
+            sequence_examples.append(sequence)
+            candidate_examples.append(to_multihot(numbers))
+            labels.append(label)
+
+    return (
+        np.asarray(sequence_examples, dtype=np.float32),
+        np.asarray(candidate_examples, dtype=np.float32),
+        np.asarray(labels, dtype=np.float32),
     )
 
 
@@ -334,6 +391,30 @@ def selftest() -> int:
         assert len(nums) == 6 and len(set(nums)) == 6 and all(1 <= n <= 45 for n in nums), nums
     assert recs_a == recs_b, "stat recommendations must be reproducible with same rng"
     assert len({tuple(r["numbers"]) for r in recs_a}) == STAT_SETS, "sets must be unique"
+
+    forbidden = {tuple(fake_draws[-1]["numbers"])}
+    candidates_a = generate_balanced_candidates(
+        np.random.default_rng(SEED), 20, forbidden
+    )
+    candidates_b = generate_balanced_candidates(
+        np.random.default_rng(SEED), 20, forbidden
+    )
+    assert candidates_a == candidates_b
+    assert len(candidates_a) == len({tuple(c) for c in candidates_a}) == 20
+    assert all(is_balanced(c) for c in candidates_a)
+    assert all(tuple(c) not in forbidden for c in candidates_a)
+
+    sequences = np.stack(
+        [np.stack([to_multihot(d["numbers"]) for d in fake_draws[:10]])]
+    )
+    positives = np.stack([to_multihot([1, 8, 15, 22, 29, 36])])
+    ex_seq, ex_cand, ex_label = expand_scorer_examples(
+        sequences, positives, np.random.default_rng(SEED)
+    )
+    assert ex_seq.shape == (NEGATIVES_PER_POSITIVE + 1, 10, 45)
+    assert ex_cand.shape == (NEGATIVES_PER_POSITIVE + 1, 45)
+    assert ex_label.tolist() == [1.0] + [0.0] * NEGATIVES_PER_POSITIVE
+    assert all(is_balanced(multihot_to_numbers(v)) for v in ex_cand)
 
     print("selftest ok")
     return 0
