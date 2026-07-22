@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """LSTM 로또 실험 학습/예측 스크립트.
 
-lotto-data.json 을 읽어, 직전 W회차 시퀀스로 다음 회차의 번호별 확률을 학습하고,
-최신 시퀀스로 다음 회차를 예측해 lstm-prediction.json 으로 저장한다.
+lotto-data.json 을 읽어 직전 W회차 시퀀스와 후보 조합의 적합도를 학습하고,
+균형 후보를 평가해 lstm-prediction.json 으로 저장한다.
 
 주의: 로또는 독립시행(IID)이라 학습 가능한 신호가 없다. 모델 출력은 사실상 과거
 빈도 통계로 수렴하며, 기존 통계 추천과 통계적으로 구분되지 않는다. 이 결과는
@@ -38,10 +38,10 @@ INFERENCE_CANDIDATES = 50_000
 VALIDATION_FRACTION = 0.1
 MAX_CANDIDATE_ATTEMPT_FACTOR = 100
 
-MODEL_NAME = "keras-lstm-multihot-v2"
+MODEL_NAME = "keras-lstm-combination-scorer-v1"
 WARNING = (
-    "로또는 독립시행이므로 이 결과는 실험용이며 당첨 확률 상승을 의미하지 않습니다. "
-    "딥러닝 출력은 과거 빈도 통계와 통계적으로 구분되지 않습니다."
+    "모델 점수는 후보 간 상대 비교값이며 당첨 확률이 아닙니다. "
+    "로또는 독립시행이므로 이 결과는 실험용입니다."
 )
 
 
@@ -90,19 +90,6 @@ def build_dataset(vectors: np.ndarray, window: int):
         x.append(vectors[i : i + window])
         y.append(vectors[i + window])
     return np.asarray(x, dtype=np.float32), np.asarray(y, dtype=np.float32)
-
-
-def top_probability_set(probs: np.ndarray) -> list[int]:
-    idx = np.argsort(probs)[::-1][:PICK]
-    return sorted(int(i) + 1 for i in idx)
-
-
-def weighted_sampling_set(probs: np.ndarray, rng: np.random.Generator) -> list[int]:
-    """확률 가중 비복원 추출로 중복 없는 6개를 보장."""
-    total = float(probs.sum())
-    p = probs / total if total > 0 else np.full(NUM_RANGE, 1.0 / NUM_RANGE)
-    picks = rng.choice(NUM_RANGE, size=PICK, replace=False, p=p)
-    return sorted(int(i) + 1 for i in picks)
 
 
 # --- 통계 균형 추천 (기존 index.html 클라이언트 로직 포팅) ---------------------
@@ -345,6 +332,55 @@ def update_history(new_prediction: dict, draws: list[dict]) -> None:
     save_history(HISTORY_PATH, entries)
 
 
+def build_combination_scorer(tf, window: int):
+    sequence_input = tf.keras.layers.Input(
+        shape=(window, NUM_RANGE), name="sequence"
+    )
+    candidate_input = tf.keras.layers.Input(shape=(NUM_RANGE,), name="candidate")
+    context = tf.keras.layers.LSTM(128)(sequence_input)
+    merged = tf.keras.layers.Concatenate()([context, candidate_input])
+    hidden = tf.keras.layers.Dense(64, activation="relu")(merged)
+    score = tf.keras.layers.Dense(1, activation="sigmoid", name="score")(hidden)
+    model = tf.keras.Model([sequence_input, candidate_input], score)
+    model.compile(
+        optimizer="adam",
+        loss="binary_crossentropy",
+        metrics=[tf.keras.metrics.AUC(name="auc")],
+    )
+    return model
+
+
+def select_scored_recommendations(
+    candidates: list[list[int]], scores: np.ndarray
+) -> list[dict]:
+    flat_scores = np.asarray(scores).reshape(-1)
+    order = np.argsort(flat_scores)[::-1]
+    best_index = int(order[0])
+    best = candidates[best_index]
+    diverse_index = next(
+        (
+            int(i)
+            for i in order[1:]
+            if len(set(best) & set(candidates[int(i)])) <= 2
+        ),
+        None,
+    )
+    if diverse_index is None:
+        raise RuntimeError("no diverse scored candidate available")
+    return [
+        {
+            "method": "lstm-combination-best",
+            "numbers": best,
+            "modelScore": round(float(flat_scores[best_index]), 6),
+        },
+        {
+            "method": "lstm-combination-diverse",
+            "numbers": candidates[diverse_index],
+            "modelScore": round(float(flat_scores[diverse_index]), 6),
+        },
+    ]
+
+
 def selftest() -> int:
     """TF 없이 이력 로직만 검증하는 자체 점검."""
     draws = [
@@ -416,6 +452,24 @@ def selftest() -> int:
     assert ex_label.tolist() == [1.0] + [0.0] * NEGATIVES_PER_POSITIVE
     assert all(is_balanced(multihot_to_numbers(v)) for v in ex_cand)
 
+    scored_candidates = [
+        [1, 8, 15, 22, 29, 36],
+        [2, 9, 16, 23, 30, 37],
+        [1, 8, 17, 24, 31, 38],
+    ]
+    selected = select_scored_recommendations(
+        scored_candidates,
+        np.asarray([0.9, 0.8, 0.7]),
+    )
+    assert [rec["method"] for rec in selected] == [
+        "lstm-combination-best",
+        "lstm-combination-diverse",
+    ]
+    assert selected[0]["numbers"] == scored_candidates[0]
+    assert selected[1]["numbers"] == scored_candidates[1]
+    assert len(set(selected[0]["numbers"]) & set(selected[1]["numbers"])) <= 2
+    assert selected[0]["modelScore"] == 0.9
+
     print("selftest ok")
     return 0
 
@@ -435,8 +489,7 @@ def main() -> int:
     import tensorflow as tf
 
     tf.keras.utils.set_random_seed(SEED)
-    rng = np.random.default_rng(SEED)
-
+    tf.config.experimental.enable_op_determinism()
     draws = load_draws(DATA_PATH)
     source_latest = draws[-1]["round"]
     target_round = source_latest + 1
@@ -448,39 +501,64 @@ def main() -> int:
             f"학습 샘플 부족: {len(x)} < {MIN_TRAIN_SAMPLES} (window={args.window})"
         )
 
-    model = tf.keras.Sequential(
-        [
-            tf.keras.layers.Input(shape=(args.window, NUM_RANGE)),
-            tf.keras.layers.LSTM(128),
-            tf.keras.layers.Dense(NUM_RANGE, activation="sigmoid"),
-        ]
+    balanced_mask = np.asarray(
+        [is_balanced(multihot_to_numbers(target)) for target in y]
     )
-    model.compile(optimizer="adam", loss="binary_crossentropy")
+    balanced_x, balanced_y = x[balanced_mask], y[balanced_mask]
+    if len(balanced_x) < MIN_TRAIN_SAMPLES:
+        raise SystemExit(
+            f"균형 학습 샘플 부족: {len(balanced_x)} < {MIN_TRAIN_SAMPLES}"
+        )
+
+    split = int(len(balanced_x) * (1.0 - VALIDATION_FRACTION))
+    if split <= 0 or split >= len(balanced_x):
+        raise SystemExit("시간순 검증 구간을 만들 수 없습니다")
+    train_seq, train_pos = balanced_x[:split], balanced_y[:split]
+    val_seq, val_pos = balanced_x[split:], balanced_y[split:]
+    train_x, train_candidates, train_labels = expand_scorer_examples(
+        train_seq, train_pos, np.random.default_rng(SEED)
+    )
+    val_x, val_candidates, val_labels = expand_scorer_examples(
+        val_seq, val_pos, np.random.default_rng(SEED + 1)
+    )
+
+    model = build_combination_scorer(tf, args.window)
     early = tf.keras.callbacks.EarlyStopping(
         monitor="val_loss", patience=8, restore_best_weights=True
     )
     history = model.fit(
-        x,
-        y,
+        [train_x, train_candidates],
+        train_labels,
+        validation_data=([val_x, val_candidates], val_labels),
         epochs=args.epochs,
         batch_size=args.batch_size,
-        validation_split=0.1,
         callbacks=[early],
         verbose=2,
     )
+    validation_auc = float(
+        model.evaluate(
+            [val_x, val_candidates], val_labels, verbose=0, return_dict=True
+        )["auc"]
+    )
 
-    # 최신 W회차 시퀀스로 다음 회차 예측
-    last_window = vectors[-args.window :][np.newaxis, ...]
-    probs = model.predict(last_window, verbose=0)[0].astype(float)
-
-    order = np.argsort(probs)[::-1]
-    top_numbers = [
-        {"number": int(i) + 1, "probability": round(float(probs[i]), 4)}
-        for i in order[:10]
-    ]
+    historical = {tuple(d["numbers"]) for d in draws}
+    # ponytail: 50k 후보로 CI 비용을 제한하며, 백테스트가 불안정하면 수를 늘린다.
+    candidates = generate_balanced_candidates(
+        np.random.default_rng(SEED + 2),
+        INFERENCE_CANDIDATES,
+        historical,
+    )
+    candidate_vectors = np.stack([to_multihot(candidate) for candidate in candidates])
+    sequence_batch = np.repeat(
+        vectors[-args.window :][np.newaxis, ...], len(candidates), axis=0
+    )
+    scores = model.predict(
+        [sequence_batch, candidate_vectors], batch_size=1024, verbose=0
+    ).reshape(-1)
+    lstm_recommendations = select_scored_recommendations(candidates, scores)
 
     result = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "model": MODEL_NAME,
         "sourceLatestRound": source_latest,
         "targetRound": target_round,
@@ -489,15 +567,12 @@ def main() -> int:
         .replace("+00:00", "Z"),
         "window": args.window,
         "epochs": int(len(history.history["loss"])),  # 실제 실행된 에폭 수
-        "trainSampleCount": int(len(x)),
-        "topNumbers": top_numbers,
+        "trainSampleCount": int(len(balanced_x)),
+        "validationAuc": round(validation_auc, 4),
+        "candidateCount": len(candidates),
         "recommendations": [
-            {"method": "lstm-top-probability", "numbers": top_probability_set(probs)},
-            {
-                "method": "lstm-weighted-sampling",
-                "numbers": weighted_sampling_set(probs, rng),
-            },
-            *stat_recommendations(draws, rng),
+            *lstm_recommendations,
+            *stat_recommendations(draws, np.random.default_rng(SEED + 3)),
         ],
         "warning": WARNING,
     }
@@ -508,7 +583,8 @@ def main() -> int:
     )
     print(
         f"saved {OUT_PATH.name}: source={source_latest} target={target_round} "
-        f"samples={len(x)} epochs={result['epochs']}"
+        f"balanced_samples={len(balanced_x)} epochs={result['epochs']} "
+        f"validation_auc={validation_auc:.4f} candidates={len(candidates)}"
     )
     return 0
 
