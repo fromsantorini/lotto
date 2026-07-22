@@ -4,99 +4,101 @@
     {
       "targetRound": 1234,
       "sourceLatestRound": 1233,
-      "trainedAt": "2026-07-18T19:22:17Z",
+      "trainedAt": "2026-07-22T02:29:29Z",
       "recommendations": [
         {
-          "method": "lstm-top-probability",
+          "method": "lstm-combination-best",
+          "numbers": [
+            8,
+            13,
+            19,
+            26,
+            37,
+            42
+          ],
+          "modelScore": 0.277241
+        },
+        {
+          "method": "lstm-combination-diverse",
+          "numbers": [
+            1,
+            15,
+            19,
+            36,
+            42,
+            45
+          ],
+          "modelScore": 0.27074
+        },
+        {
+          "method": "balanced-statistical",
           "numbers": [
             2,
+            8,
             11,
-            16,
-            26,
-            31,
-            33
-          ]
-        },
-        {
-          "method": "lstm-weighted-sampling",
-          "numbers": [
-            4,
-            20,
-            32,
             35,
-            39,
-            44
-          ]
-        },
-        {
-          "method": "balanced-statistical",
-          "numbers": [
-            7,
-            11,
-            13,
-            22,
-            26,
-            39
-          ],
-          "reason": {
-            "oddEven": "4:2",
-            "lowHigh": "4:2",
-            "sum": 118,
-            "frequentNumbers": [
-              7,
-              13
-            ],
-            "coldNumbers": [
-              11,
-              22
-            ]
-          }
-        },
-        {
-          "method": "balanced-statistical",
-          "numbers": [
-            15,
-            16,
-            18,
-            22,
-            30,
-            39
-          ],
-          "reason": {
-            "oddEven": "2:4",
-            "lowHigh": "4:2",
-            "sum": 140,
-            "frequentNumbers": [
-              15,
-              16
-            ],
-            "coldNumbers": [
-              18,
-              22
-            ]
-          }
-        },
-        {
-          "method": "balanced-statistical",
-          "numbers": [
-            11,
-            15,
-            16,
-            32,
-            40,
-            45
+            37,
+            40
           ],
           "reason": {
             "oddEven": "3:3",
             "lowHigh": "3:3",
-            "sum": 159,
+            "sum": 133,
             "frequentNumbers": [
-              15,
-              16
+              8,
+              37
+            ],
+            "coldNumbers": [
+              2,
+              11
+            ]
+          }
+        },
+        {
+          "method": "balanced-statistical",
+          "numbers": [
+            11,
+            12,
+            20,
+            23,
+            28,
+            30
+          ],
+          "reason": {
+            "oddEven": "2:4",
+            "lowHigh": "3:3",
+            "sum": 124,
+            "frequentNumbers": [
+              12,
+              28
             ],
             "coldNumbers": [
               11,
-              32
+              23
+            ]
+          }
+        },
+        {
+          "method": "balanced-statistical",
+          "numbers": [
+            6,
+            7,
+            11,
+            23,
+            28,
+            36
+          ],
+          "reason": {
+            "oddEven": "3:3",
+            "lowHigh": "3:3",
+            "sum": 111,
+            "frequentNumbers": [
+              7,
+              28
+            ],
+            "coldNumbers": [
+              11,
+              23
             ]
           }
         }
