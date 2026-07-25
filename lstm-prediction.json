@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "model": "keras-lstm-combination-scorer-v1",
-  "sourceLatestRound": 1233,
-  "targetRound": 1234,
-  "trainedAt": "2026-07-22T02:29:29Z",
+  "sourceLatestRound": 1234,
+  "targetRound": 1235,
+  "trainedAt": "2026-07-25T19:32:46Z",
   "window": 10,
   "epochs": 9,
   "trainSampleCount": 701,
@@ -20,19 +20,19 @@
         37,
         42
       ],
-      "modelScore": 0.277241
+      "modelScore": 0.273183
     },
     {
       "method": "lstm-combination-diverse",
       "numbers": [
-        1,
-        15,
+        2,
+        8,
         19,
         36,
-        42,
+        41,
         45
       ],
-      "modelScore": 0.27074
+      "modelScore": 0.267556
     },
     {
       "method": "balanced-statistical",
@@ -41,16 +41,16 @@
         8,
         11,
         35,
-        37,
+        38,
         40
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "2:4",
         "lowHigh": "3:3",
-        "sum": 133,
+        "sum": 134,
         "frequentNumbers": [
           8,
-          37
+          38
         ],
         "coldNumbers": [
           2,
@@ -61,20 +61,20 @@
     {
       "method": "balanced-statistical",
       "numbers": [
+        6,
         11,
-        12,
-        20,
         23,
-        28,
-        30
+        31,
+        36,
+        37
       ],
       "reason": {
-        "oddEven": "2:4",
-        "lowHigh": "3:3",
-        "sum": 124,
+        "oddEven": "4:2",
+        "lowHigh": "2:4",
+        "sum": 144,
         "frequentNumbers": [
-          12,
-          28
+          31,
+          37
         ],
         "coldNumbers": [
           11,
@@ -85,24 +85,24 @@
     {
       "method": "balanced-statistical",
       "numbers": [
-        6,
-        7,
-        11,
-        23,
+        5,
+        9,
+        22,
+        24,
         28,
-        36
+        44
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "2:4",
         "lowHigh": "3:3",
-        "sum": 111,
+        "sum": 132,
         "frequentNumbers": [
-          7,
+          9,
           28
         ],
         "coldNumbers": [
-          11,
-          23
+          5,
+          22
         ]
       }
     }
