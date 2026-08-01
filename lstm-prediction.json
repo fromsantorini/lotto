@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "model": "keras-lstm-combination-scorer-v1",
-  "sourceLatestRound": 1234,
-  "targetRound": 1235,
-  "trainedAt": "2026-07-25T19:32:46Z",
+  "sourceLatestRound": 1235,
+  "targetRound": 1236,
+  "trainedAt": "2026-08-01T19:31:22Z",
   "window": 10,
   "epochs": 9,
   "trainSampleCount": 701,
@@ -20,41 +20,41 @@
         37,
         42
       ],
-      "modelScore": 0.273183
+      "modelScore": 0.267862
     },
     {
       "method": "lstm-combination-diverse",
       "numbers": [
         2,
-        8,
+        10,
         19,
         36,
-        41,
+        37,
         45
       ],
-      "modelScore": 0.267556
+      "modelScore": 0.263147
     },
     {
       "method": "balanced-statistical",
       "numbers": [
-        2,
-        8,
-        11,
-        35,
-        38,
-        40
+        12,
+        17,
+        18,
+        23,
+        29,
+        37
       ],
       "reason": {
-        "oddEven": "2:4",
+        "oddEven": "4:2",
         "lowHigh": "3:3",
-        "sum": 134,
+        "sum": 136,
         "frequentNumbers": [
-          8,
-          38
+          12,
+          37
         ],
         "coldNumbers": [
-          2,
-          11
+          18,
+          23
         ]
       }
     },
@@ -62,22 +62,22 @@
       "method": "balanced-statistical",
       "numbers": [
         6,
-        11,
+        9,
+        18,
         23,
-        31,
         36,
         37
       ],
       "reason": {
-        "oddEven": "4:2",
-        "lowHigh": "2:4",
-        "sum": 144,
+        "oddEven": "3:3",
+        "lowHigh": "3:3",
+        "sum": 129,
         "frequentNumbers": [
-          31,
+          9,
           37
         ],
         "coldNumbers": [
-          11,
+          18,
           23
         ]
       }
@@ -86,7 +86,7 @@
       "method": "balanced-statistical",
       "numbers": [
         5,
-        9,
+        7,
         22,
         24,
         28,
@@ -95,9 +95,9 @@
       "reason": {
         "oddEven": "2:4",
         "lowHigh": "3:3",
-        "sum": 132,
+        "sum": 130,
         "frequentNumbers": [
-          9,
+          7,
           28
         ],
         "coldNumbers": [

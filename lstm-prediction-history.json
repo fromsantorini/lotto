@@ -2,6 +2,110 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "targetRound": 1236,
+      "sourceLatestRound": 1235,
+      "trainedAt": "2026-08-01T19:31:22Z",
+      "recommendations": [
+        {
+          "method": "lstm-combination-best",
+          "numbers": [
+            8,
+            13,
+            19,
+            26,
+            37,
+            42
+          ],
+          "modelScore": 0.267862
+        },
+        {
+          "method": "lstm-combination-diverse",
+          "numbers": [
+            2,
+            10,
+            19,
+            36,
+            37,
+            45
+          ],
+          "modelScore": 0.263147
+        },
+        {
+          "method": "balanced-statistical",
+          "numbers": [
+            12,
+            17,
+            18,
+            23,
+            29,
+            37
+          ],
+          "reason": {
+            "oddEven": "4:2",
+            "lowHigh": "3:3",
+            "sum": 136,
+            "frequentNumbers": [
+              12,
+              37
+            ],
+            "coldNumbers": [
+              18,
+              23
+            ]
+          }
+        },
+        {
+          "method": "balanced-statistical",
+          "numbers": [
+            6,
+            9,
+            18,
+            23,
+            36,
+            37
+          ],
+          "reason": {
+            "oddEven": "3:3",
+            "lowHigh": "3:3",
+            "sum": 129,
+            "frequentNumbers": [
+              9,
+              37
+            ],
+            "coldNumbers": [
+              18,
+              23
+            ]
+          }
+        },
+        {
+          "method": "balanced-statistical",
+          "numbers": [
+            5,
+            7,
+            22,
+            24,
+            28,
+            44
+          ],
+          "reason": {
+            "oddEven": "2:4",
+            "lowHigh": "3:3",
+            "sum": 130,
+            "frequentNumbers": [
+              7,
+              28
+            ],
+            "coldNumbers": [
+              5,
+              22
+            ]
+          }
+        }
+      ],
+      "result": null
+    },
+    {
       "targetRound": 1235,
       "sourceLatestRound": 1234,
       "trainedAt": "2026-07-25T19:32:46Z",
@@ -103,7 +207,45 @@
           }
         }
       ],
-      "result": null
+      "result": {
+        "date": "2026-08-01",
+        "winningNumbers": [
+          6,
+          7,
+          11,
+          15,
+          39,
+          43
+        ],
+        "bonus": 20,
+        "matches": [
+          {
+            "method": "lstm-combination-best",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "lstm-combination-diverse",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "balanced-statistical",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "balanced-statistical",
+            "matchCount": 2,
+            "bonusMatched": false
+          },
+          {
+            "method": "balanced-statistical",
+            "matchCount": 0,
+            "bonusMatched": false
+          }
+        ]
+      }
     },
     {
       "targetRound": 1234,
