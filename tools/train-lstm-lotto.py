@@ -94,10 +94,15 @@ def build_dataset(vectors: np.ndarray, window: int):
 
 # --- 통계 균형 추천 (기존 index.html 클라이언트 로직 포팅) ---------------------
 # 홀짝 2~4, 저고 2~4, 합계 90~180, 같은 끝수 최대 2개, 3연번 이상 금지,
-# 역대 1등 조합 제외. 강세 2 + 소외 2 + 중간 2 혼합.
+# 역대 1등 조합 제외. 강세 2 + 소외 2 + 중간 2 혼합, 이월수 1개 이상.
+# 끝수·홀짝·저고·구간·연번은 "최근 4회 + 이번 추천" 5회 창의 비율이
+# 전체 누적 비율과 비슷해지도록 보정(평균 회귀)한다.
 
 STAT_WINDOW = 100   # 강세/소외 판정에 쓰는 최근 회차 수
 STAT_SETS = 3
+WINDOW_RECENT = 4   # 보정 창: 최근 4회 + 이번 추천 = 5회
+STAT_POOL = 40      # 창 편차 비교용 후보 풀 크기
+NUMBER_ZONES = [(1, 10), (11, 20), (21, 30), (31, 40), (41, 45)]
 
 
 def consecutive_runs(nums: list[int]) -> list[list[int]]:
@@ -182,6 +187,35 @@ def expand_scorer_examples(
     )
 
 
+def overall_profile(draws: list[dict]) -> dict:
+    """전체 누적 통계를 번호 칸 비율로 요약 (끝수·홀짝·저고·구간·연번율)."""
+    nums = [n for d in draws for n in d["numbers"]]
+    total = len(nums)
+    return {
+        "digitShare": [sum(1 for n in nums if n % 10 == d) / total for d in range(10)],
+        "oddShare": sum(1 for n in nums if n % 2) / total,
+        "lowShare": sum(1 for n in nums if n <= 22) / total,
+        "zoneShare": [sum(1 for n in nums if lo <= n <= hi) / total for lo, hi in NUMBER_ZONES],
+        "runRate": sum(bool(consecutive_runs(d["numbers"])) for d in draws) / len(draws),
+    }
+
+
+def window_deviation(profile: dict, window_nums: list[int]) -> float:
+    """(최근 4회 + 후보) 창의 끝수·홀짝·저고·구간 비율과 전체 누적 비율의 편차 합."""
+    total = len(window_nums)
+    dev = sum(
+        abs(sum(1 for n in window_nums if n % 10 == d) / total - profile["digitShare"][d])
+        for d in range(10)
+    )
+    dev += abs(sum(1 for n in window_nums if n % 2) / total - profile["oddShare"])
+    dev += abs(sum(1 for n in window_nums if n <= 22) / total - profile["lowShare"])
+    dev += sum(
+        abs(sum(1 for n in window_nums if lo <= n <= hi) / total - profile["zoneShare"][z])
+        for z, (lo, hi) in enumerate(NUMBER_ZONES)
+    )
+    return dev
+
+
 def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int = STAT_SETS) -> list[dict]:
     """최근 STAT_WINDOW회차 빈도 기반 통계 균형 추천 count세트 생성 (draws는 오름차순)."""
     recent = draws[-STAT_WINDOW:]
@@ -193,32 +227,54 @@ def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int
     cold = sorted(counts, key=lambda n: (counts[n], n))[:12]
     middle = [n for n in range(1, NUM_RANGE + 1) if n not in hot and n not in cold]
     historical = {tuple(d["numbers"]) for d in draws}
+    carry_pool = set(draws[-1]["numbers"])
+    profile = overall_profile(draws)
+    recent4 = [n for d in draws[-WINDOW_RECENT:] for n in d["numbers"]]
+    # 연번: 5회 창 기대치 대비 최근 4회가 부족하면 이번 세트에 2연번 포함
+    runs4 = sum(1 for d in draws[-WINDOW_RECENT:] if consecutive_runs(d["numbers"]))
+    want_run = profile["runRate"] * (WINDOW_RECENT + 1) - runs4 >= 0.5
+    # 끝수 보정 표시용: 5회 창 목표 대비 최근 4회에 1개 이상 부족한 끝수
+    slots = len(recent4) + PICK
+    deficit_digits = {
+        d for d in range(10)
+        if profile["digitShare"][d] * slots - sum(1 for n in recent4 if n % 10 == d) >= 1
+    }
 
-    def pick_candidate() -> list[int]:
+    def pick_candidate(seen: set[tuple[int, ...]]) -> list[int]:
+        pool: list[list[int]] = []
+        pooled: set[tuple[int, ...]] = set()
         for _ in range(500):
             cand = sorted(
                 int(n)
                 for group, k in ((hot, 2), (cold, 2), (middle, 2))
                 for n in rng.choice(group, size=k, replace=False)
             )
-            if is_balanced(cand) and tuple(cand) not in historical:
-                return cand
+            key = tuple(cand)
+            if (
+                key not in pooled
+                and key not in seen
+                and key not in historical
+                and is_balanced(cand)
+                and carry_pool & set(cand)
+                and bool(consecutive_runs(cand)) == want_run
+            ):
+                pool.append(cand)
+                pooled.add(key)
+                if len(pool) >= STAT_POOL:
+                    break
+        if pool:  # 5회 창 비율이 전체 비율에 가장 가까운 후보 선택
+            return min(pool, key=lambda c: (window_deviation(profile, recent4 + c), tuple(c)))
         for _ in range(500):  # 균형 조건을 만족 못 하면 역대 조합만 피한 대체 조합
             cand = sorted(int(n) + 1 for n in rng.choice(NUM_RANGE, size=PICK, replace=False))
-            if tuple(cand) not in historical:
+            if tuple(cand) not in historical and tuple(cand) not in seen:
                 return cand
         raise RuntimeError("no unique statistical recommendation available")
 
     recs: list[dict] = []
     seen: set[tuple[int, ...]] = set()
-    for _ in range(50):
-        if len(recs) >= count:
-            break
-        cand = pick_candidate()
-        key = tuple(cand)
-        if key in seen:
-            continue
-        seen.add(key)
+    for _ in range(count):
+        cand = pick_candidate(seen)
+        seen.add(tuple(cand))
         odd = sum(1 for n in cand if n % 2)
         low = sum(1 for n in cand if n <= 22)
         recs.append(
@@ -231,6 +287,9 @@ def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int
                     "sum": sum(cand),
                     "frequentNumbers": [n for n in cand if n in hot],
                     "coldNumbers": [n for n in cand if n in cold],
+                    "carryOverNumbers": [n for n in cand if n in carry_pool],
+                    "endingNumbers": [n for n in cand if n % 10 in deficit_digits],
+                    "consecutiveRuns": consecutive_runs(cand),
                 },
             }
         )
@@ -422,9 +481,30 @@ def selftest() -> int:
     recs_a = stat_recommendations(fake_draws, np.random.default_rng(7))
     recs_b = stat_recommendations(fake_draws, np.random.default_rng(7))
     assert len(recs_a) == STAT_SETS
+    latest_numbers = set(fake_draws[-1]["numbers"])
+    profile = overall_profile(fake_draws)
+    recent4 = [n for d in fake_draws[-WINDOW_RECENT:] for n in d["numbers"]]
+    runs4 = sum(1 for d in fake_draws[-WINDOW_RECENT:] if consecutive_runs(d["numbers"]))
+    want_run = profile["runRate"] * (WINDOW_RECENT + 1) - runs4 >= 0.5
+    slots = len(recent4) + 6
+    deficit_digits = {
+        d for d in range(10)
+        if profile["digitShare"][d] * slots - sum(1 for n in recent4 if n % 10 == d) >= 1
+    }
     for rec in recs_a:
         nums = rec["numbers"]
         assert len(nums) == 6 and len(set(nums)) == 6 and all(1 <= n <= 45 for n in nums), nums
+        reason = rec["reason"]
+        assert reason["carryOverNumbers"] and set(reason["carryOverNumbers"]) <= latest_numbers, reason
+        assert reason["endingNumbers"] == [n for n in nums if n % 10 in deficit_digits], reason
+        assert reason["consecutiveRuns"] == consecutive_runs(nums), reason
+        assert bool(consecutive_runs(nums)) == want_run, (nums, want_run)
+
+    # 창 편차 검증: 창 비율이 전체 비율과 같으면 편차 0
+    uniform_draws = [{"round": r, "numbers": [1, 2, 13, 24, 35, 41]} for r in range(1, 11)]
+    uprofile = overall_profile(uniform_draws)
+    urecent = [n for d in uniform_draws[-WINDOW_RECENT:] for n in d["numbers"]]
+    assert window_deviation(uprofile, urecent + [1, 2, 13, 24, 35, 41]) < 1e-9
     assert recs_a == recs_b, "stat recommendations must be reproducible with same rng"
     assert len({tuple(r["numbers"]) for r in recs_a}) == STAT_SETS, "sets must be unique"
 

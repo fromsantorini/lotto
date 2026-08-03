@@ -1239,19 +1239,25 @@
         return "기존 규칙으로 충분한 조합을 찾지 못해, 중복 이력만 피한 탐색용 대체 조합입니다.";
       }
 
+      const extras = [];
+      if ((recommendation.reason.carryOverNumbers || []).length) extras.push(`직전 회차 이월수 ${recommendation.reason.carryOverNumbers.join(", ")}`);
+      if ((recommendation.reason.endingNumbers || []).length) extras.push(`최근 4회 대비 부족했던 끝수 보정 ${recommendation.reason.endingNumbers.join(", ")}`);
+      if ((recommendation.reason.consecutiveRuns || []).length) extras.push(`연번 ${recommendation.reason.consecutiveRuns.map((run) => run.join("-")).join(", ")}`);
+      const extraText = extras.length ? ` ${extras.join("와 ")}도 반영했습니다.` : "";
+
       if (hot.length && cold.length) {
-        return `강세 번호 ${hot.join(", ")}와 쉬어가던 번호 ${cold.join(", ")}를 섞고, 홀짝 ${recommendation.reason.oddEven} 균형을 맞춘 조합입니다.`;
+        return `강세 번호 ${hot.join(", ")}와 쉬어가던 번호 ${cold.join(", ")}를 섞고, 홀짝 ${recommendation.reason.oddEven} 균형을 맞춘 조합입니다.${extraText}`;
       }
 
       if (hot.length) {
-        return `최근 자주 나온 번호 ${hot.join(", ")} 축을 유지하면서 홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh} 균형을 맞춘 조합입니다.`;
+        return `최근 자주 나온 번호 ${hot.join(", ")} 축을 유지하면서 홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh} 균형을 맞춘 조합입니다.${extraText}`;
       }
 
       if (cold.length) {
-        return `쉬어가던 번호 ${cold.join(", ")}를 섞어 변화폭을 준 조합이며, 합계 ${recommendation.reason.sum} 기준선도 함께 맞췄습니다.`;
+        return `쉬어가던 번호 ${cold.join(", ")}를 섞어 변화폭을 준 조합이며, 합계 ${recommendation.reason.sum} 기준선도 함께 맞췄습니다.${extraText}`;
       }
 
-      return `홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh}, 합계 ${recommendation.reason.sum} 균형을 먼저 맞춘 탐색용 조합입니다.`;
+      return `홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh}, 합계 ${recommendation.reason.sum} 균형을 먼저 맞춘 탐색용 조합입니다.${extraText}`;
     }
 
     function renderRecommendationBadges(recommendation) {
@@ -1263,6 +1269,9 @@
 
       if (recommendation.reason.frequentNumbers.length) badges.push(`강세 번호 포함 ${recommendation.reason.frequentNumbers.join(", ")}`);
       if (recommendation.reason.coldNumbers.length) badges.push(`소외 번호 포함 ${recommendation.reason.coldNumbers.join(", ")}`);
+      if ((recommendation.reason.carryOverNumbers || []).length) badges.push(`이월수 ${recommendation.reason.carryOverNumbers.join(", ")}`);
+      if ((recommendation.reason.endingNumbers || []).length) badges.push(`보정 끝수 ${recommendation.reason.endingNumbers.join(", ")}`);
+      if ((recommendation.reason.consecutiveRuns || []).length) badges.push(`연번 ${recommendation.reason.consecutiveRuns.map((run) => run.join("-")).join(", ")}`);
       if (recommendation.method === "fallback-random") badges.push("대체 조합");
 
       return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
