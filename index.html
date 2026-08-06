@@ -189,6 +189,14 @@
     .ball.n3 { background: #d1242f; }
     .ball.n4 { background: #6e7781; }
     .ball.n5 { background: #168a53; }
+    .ball.hit {
+      outline: 4px solid #f2b705;
+      box-shadow: 0 0 0 2px #fff, 0 0 14px #f2b705;
+    }
+    .ball.bonus-hit {
+      outline: 4px solid #8250df;
+      box-shadow: 0 0 0 2px #fff, 0 0 14px #8250df;
+    }
 
     .recommendation-list {
       display: grid;
@@ -1134,10 +1142,14 @@
       };
     }
 
-    function renderBalls(numbers, bonus = null) {
-      const mainBalls = numbers.map((number) => (
-        `<span class="ball ${getBallClass(number)}">${number}</span>`
-      )).join("");
+    function renderBalls(numbers, bonus = null, highlights = null) {
+      const winningNumbers = new Set(highlights?.winningNumbers || []);
+      const mainBalls = numbers.map((number) => {
+        const highlightClass = winningNumbers.has(number)
+          ? " hit"
+          : number === highlights?.bonus ? " bonus-hit" : "";
+        return `<span class="ball ${getBallClass(number)}${highlightClass}">${number}</span>`;
+      }).join("");
       if (!bonus) return `<div class="balls">${mainBalls}</div>`;
       return `<div class="balls">${mainBalls}<span class="muted">+</span><span class="ball ${getBallClass(bonus)}">${bonus}</span></div>`;
     }
@@ -1327,7 +1339,10 @@
                     const match = result && result.matches[index] ? result.matches[index] : null;
                     return `
                       <article class="recommendation-card">
-                        ${renderBalls(rec.numbers)}
+                        ${renderBalls(rec.numbers, null, {
+                          winningNumbers: result.winningNumbers,
+                          bonus: result.bonus
+                        })}
                         <div class="stat-pills" style="margin-top:10px;">
                           <span class="stat-pill">${methodLabel(rec.method)}</span>
                           ${match
