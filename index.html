@@ -228,12 +228,6 @@
       margin: 4px 0 0;
     }
 
-    .history-draw {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--line);
-    }
-
     .briefing-panel {
       background:
         linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -1279,19 +1273,19 @@
 
     function renderLstmScoreboard(entries) {
       const panel = document.querySelector("#lstmScorePanel");
-      if (!entries.length) {
+      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
+      if (!scored.length) {
         panel.innerHTML = `
           <div class="section-head">
             <div>
               <h2>추천 성적표</h2>
-              <p class="muted">아직 누적된 추천 이력이 없습니다. 매주 CI가 돌면 회차별 추천(딥러닝 + 통계)과 실제 결과 대조가 여기에 쌓입니다.</p>
+              <p class="muted">아직 채점 완료된 추천 이력이 없습니다. 추첨 결과가 나온 회차만 여기에 표시됩니다.</p>
             </div>
           </div>
         `;
         return;
       }
 
-      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
       const allMatches = scored.flatMap((entry) => entry.result.matches);
       const averageOf = (matches) => matches.length
         ? matches.reduce((total, match) => total + match.matchCount, 0) / matches.length
@@ -1316,15 +1310,16 @@
           ${allMatches.length ? `<span class="stat-pill">최고 기록 ${bestMatch}개 일치</span>` : ""}
         </div>
         <div class="history-batch-list">
-          ${entries.slice(0, 20).map((entry) => {
+          ${scored.slice(0, 20).map((entry) => {
             const result = entry.result;
             return `
               <section class="history-batch">
                 <div class="history-batch-head">
                   <div>
                     <h3>${entry.targetRound}회 예측 (학습 기준 ${entry.sourceLatestRound || "-"}회)</h3>
-                    <p class="muted">${result ? "채점 완료" : `${entry.targetRound}회 발표 전 · 결과 대기`}</p>
+                    <p class="muted">채점 완료${result.date ? ` · ${result.date}` : ""}</p>
                   </div>
+                  ${renderBalls(result.winningNumbers, result.bonus)}
                   ${entry.trainedAt ? `<span class="stat-pill">${formatDateTime(entry.trainedAt)} 학습</span>` : ""}
                 </div>
                 <div class="recommendation-list">
@@ -1344,12 +1339,6 @@
                     `;
                   }).join("")}
                 </div>
-                ${result ? `
-                  <div class="history-draw">
-                    <p class="muted" style="margin:0 0 10px;">실제 당첨 번호 (${entry.targetRound}회${result.date ? ` · ${result.date}` : ""})</p>
-                    ${renderBalls(result.winningNumbers, result.bonus)}
-                  </div>
-                ` : ""}
               </section>
             `;
           }).join("")}
