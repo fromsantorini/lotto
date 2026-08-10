@@ -2,7 +2,7 @@
 """LSTM 로또 실험 학습/예측 스크립트.
 
 lotto-data.json 을 읽어 직전 W회차 시퀀스와 후보 조합의 적합도를 학습하고,
-균형 후보를 평가해 lstm-prediction.json 으로 저장한다.
+유효 후보를 가중 선택해 lstm-prediction.json 으로 저장한다.
 
 주의: 로또는 독립시행(IID)이라 학습 가능한 신호가 없다. 모델 출력은 사실상 과거
 빈도 통계로 수렴하며, 기존 통계 추천과 통계적으로 구분되지 않는다. 이 결과는
@@ -92,11 +92,9 @@ def build_dataset(vectors: np.ndarray, window: int):
     return np.asarray(x, dtype=np.float32), np.asarray(y, dtype=np.float32)
 
 
-# --- 통계 균형 추천 (기존 index.html 클라이언트 로직 포팅) ---------------------
-# 홀짝 2~4, 저고 2~4, 합계 90~180, 같은 끝수 최대 2개, 3연번 이상 금지,
-# 역대 1등 조합 제외. 강세 2 + 소외 2 + 중간 2 혼합, 이월수 1개 이상.
-# 끝수·홀짝·저고·구간·연번은 "최근 4회 + 이번 추천" 5회 창의 비율이
-# 전체 누적 비율과 비슷해지도록 보정(평균 회귀)한다.
+# --- 통계 가중 추천 -----------------------------------------------------------
+# 번호 형태는 강제하지 않는다. 역대 1등 조합만 제외하고, 기존 통계 지표는
+# 후보의 선택 가중치에만 반영한다. 모든 유효 후보의 선택 가중치는 0보다 크다.
 
 STAT_WINDOW = 100   # 강세/소외 판정에 쓰는 최근 회차 수
 STAT_SETS = 3
@@ -120,7 +118,8 @@ def consecutive_runs(nums: list[int]) -> list[list[int]]:
     return runs
 
 
-def is_balanced(nums: list[int]) -> bool:
+def matches_legacy_balance(nums: list[int]) -> bool:
+    """과거 강제 조건이 현재 후보를 거르지 않는지 확인하기 위한 자체 테스트용."""
     odd = sum(1 for n in nums if n % 2)
     low = sum(1 for n in nums if n <= 22)
     total = sum(nums)
@@ -139,7 +138,7 @@ def multihot_to_numbers(vector: np.ndarray) -> list[int]:
     return [int(i) + 1 for i in np.flatnonzero(vector)]
 
 
-def generate_balanced_candidates(
+def generate_candidates(
     rng: np.random.Generator,
     count: int,
     forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
@@ -149,11 +148,11 @@ def generate_balanced_candidates(
         numbers = tuple(
             sorted(int(i) + 1 for i in rng.choice(NUM_RANGE, PICK, replace=False))
         )
-        if numbers not in forbidden and is_balanced(list(numbers)):
+        if numbers not in forbidden:
             candidates.add(numbers)
             if len(candidates) == count:
                 return [list(candidate) for candidate in sorted(candidates)]
-    raise RuntimeError(f"balanced candidate shortage: {len(candidates)} < {count}")
+    raise RuntimeError(f"candidate shortage: {len(candidates)} < {count}")
 
 
 def expand_scorer_examples(
@@ -167,7 +166,7 @@ def expand_scorer_examples(
 
     for sequence, positive in zip(sequences, positives):
         positive_numbers = multihot_to_numbers(positive)
-        negatives = generate_balanced_candidates(
+        negatives = generate_candidates(
             rng,
             NEGATIVES_PER_POSITIVE,
             {tuple(positive_numbers)},
@@ -216,8 +215,24 @@ def window_deviation(profile: dict, window_nums: list[int]) -> float:
     return dev
 
 
-def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int = STAT_SETS) -> list[dict]:
-    """최근 STAT_WINDOW회차 빈도 기반 통계 균형 추천 count세트 생성 (draws는 오름차순)."""
+def selection_weights(scores: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+    """유한 점수를 순서 보존·양수 확률로 변환한다."""
+    values = np.asarray(scores, dtype=np.float64).reshape(-1)
+    if not len(values) or not np.all(np.isfinite(values)) or temperature <= 0:
+        raise ValueError("finite scores and positive temperature required")
+    scaled = (values - np.max(values)) / temperature
+    scaled = np.maximum(scaled, np.log(np.finfo(np.float64).tiny))
+    weights = np.exp(scaled)
+    return weights / weights.sum()
+
+
+def stat_recommendations(
+    draws: list[dict],
+    rng: np.random.Generator,
+    count: int = STAT_SETS,
+    forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
+) -> list[dict]:
+    """최근 통계 점수를 선택 가중치로만 쓰는 추천 count세트 (draws는 오름차순)."""
     recent = draws[-STAT_WINDOW:]
     counts = {n: 0 for n in range(1, NUM_RANGE + 1)}
     for d in recent:
@@ -225,8 +240,7 @@ def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int
             counts[n] += 1
     hot = sorted(counts, key=lambda n: (-counts[n], n))[:12]
     cold = sorted(counts, key=lambda n: (counts[n], n))[:12]
-    middle = [n for n in range(1, NUM_RANGE + 1) if n not in hot and n not in cold]
-    historical = {tuple(d["numbers"]) for d in draws}
+    historical = {tuple(d["numbers"]) for d in draws} | set(forbidden)
     carry_pool = set(draws[-1]["numbers"])
     profile = overall_profile(draws)
     recent4 = [n for d in draws[-WINDOW_RECENT:] for n in d["numbers"]]
@@ -240,46 +254,36 @@ def stat_recommendations(draws: list[dict], rng: np.random.Generator, count: int
         if profile["digitShare"][d] * slots - sum(1 for n in recent4 if n % 10 == d) >= 1
     }
 
-    def pick_candidate(seen: set[tuple[int, ...]]) -> list[int]:
-        pool: list[list[int]] = []
-        pooled: set[tuple[int, ...]] = set()
-        for _ in range(500):
-            cand = sorted(
-                int(n)
-                for group, k in ((hot, 2), (cold, 2), (middle, 2))
-                for n in rng.choice(group, size=k, replace=False)
-            )
-            key = tuple(cand)
-            if (
-                key not in pooled
-                and key not in seen
-                and key not in historical
-                and is_balanced(cand)
-                and carry_pool & set(cand)
-                and bool(consecutive_runs(cand)) == want_run
-            ):
-                pool.append(cand)
-                pooled.add(key)
-                if len(pool) >= STAT_POOL:
-                    break
-        if pool:  # 5회 창 비율이 전체 비율에 가장 가까운 후보 선택
-            return min(pool, key=lambda c: (window_deviation(profile, recent4 + c), tuple(c)))
-        for _ in range(500):  # 균형 조건을 만족 못 하면 역대 조합만 피한 대체 조합
-            cand = sorted(int(n) + 1 for n in rng.choice(NUM_RANGE, size=PICK, replace=False))
-            if tuple(cand) not in historical and tuple(cand) not in seen:
-                return cand
-        raise RuntimeError("no unique statistical recommendation available")
-
+    candidates = generate_candidates(rng, max(STAT_POOL, count), historical)
+    average_sum = float(np.mean([sum(d["numbers"]) for d in draws]))
+    sum_std = max(float(np.std([sum(d["numbers"]) for d in draws])), 1.0)
+    scores = []
+    for cand in candidates:
+        hot_count = sum(n in hot for n in cand)
+        cold_count = sum(n in cold for n in cand)
+        carry_count = sum(n in carry_pool for n in cand)
+        preference_penalty = (
+            abs(hot_count - 2)
+            + abs(cold_count - 2)
+            + abs(carry_count - 1)
+            + int(bool(consecutive_runs(cand)) != want_run)
+        )
+        scores.append(
+            -window_deviation(profile, recent4 + cand)
+            - abs(sum(cand) - average_sum) / sum_std
+            - 0.25 * preference_penalty
+        )
+    selected_indices = rng.choice(
+        len(candidates), size=count, replace=False, p=selection_weights(np.asarray(scores))
+    )
     recs: list[dict] = []
-    seen: set[tuple[int, ...]] = set()
-    for _ in range(count):
-        cand = pick_candidate(seen)
-        seen.add(tuple(cand))
+    for index in selected_indices:
+        cand = candidates[int(index)]
         odd = sum(1 for n in cand if n % 2)
         low = sum(1 for n in cand if n <= 22)
         recs.append(
             {
-                "method": "balanced-statistical",
+                "method": "weighted-statistical",
                 "numbers": cand,
                 "reason": {
                     "oddEven": f"{odd}:{PICK - odd}",
@@ -410,38 +414,24 @@ def build_combination_scorer(tf, window: int):
 
 
 def select_scored_recommendations(
-    candidates: list[list[int]], scores: np.ndarray
+    candidates: list[list[int]], scores: np.ndarray, rng: np.random.Generator
 ) -> list[dict]:
     flat_scores = np.asarray(scores).reshape(-1)
-    order = np.argsort(flat_scores)[::-1]
-    best_index = int(order[0])
-    best = candidates[best_index]
-    diverse_index = next(
-        (
-            int(i)
-            for i in order[1:]
-            if len(set(best) & set(candidates[int(i)])) <= 2
-        ),
-        None,
+    indices = rng.choice(
+        len(candidates), size=2, replace=False, p=selection_weights(flat_scores, temperature=0.1)
     )
-    if diverse_index is None:
-        raise RuntimeError("no diverse scored candidate available")
     return [
         {
-            "method": "lstm-combination-best",
-            "numbers": best,
-            "modelScore": round(float(flat_scores[best_index]), 6),
-        },
-        {
-            "method": "lstm-combination-diverse",
-            "numbers": candidates[diverse_index],
-            "modelScore": round(float(flat_scores[diverse_index]), 6),
-        },
+            "method": "lstm-weighted-selection",
+            "numbers": candidates[int(index)],
+            "modelScore": round(float(flat_scores[int(index)]), 6),
+        }
+        for index in indices
     ]
 
 
 def selftest() -> int:
-    """TF 없이 이력 로직만 검증하는 자체 점검."""
+    """TF 없이 추천/이력 핵심 로직을 검증하는 자체 점검."""
     draws = [
         {"round": 100, "numbers": [1, 2, 3, 4, 5, 6], "date": "2026-01-03", "bonus": 7},
     ]
@@ -472,20 +462,18 @@ def selftest() -> int:
     future = reconcile_history(future, draws)
     assert next(e for e in future if e["targetRound"] == 101)["result"] is None
 
-    # 통계 추천: 3세트, 유효성, 재현성
+    # 통계 추천: 3세트, 유효성, 재현성, 역대/번들 중복 제외
     rng_a = np.random.default_rng(SEED)
     fake_draws = [
         {"round": r, "numbers": sorted(int(n) + 1 for n in rng_a.choice(45, size=6, replace=False))}
         for r in range(1, 121)
     ]
-    recs_a = stat_recommendations(fake_draws, np.random.default_rng(7))
-    recs_b = stat_recommendations(fake_draws, np.random.default_rng(7))
+    extra_forbidden = {(1, 2, 3, 4, 5, 6)}
+    recs_a = stat_recommendations(fake_draws, np.random.default_rng(7), forbidden=extra_forbidden)
+    recs_b = stat_recommendations(fake_draws, np.random.default_rng(7), forbidden=extra_forbidden)
     assert len(recs_a) == STAT_SETS
-    latest_numbers = set(fake_draws[-1]["numbers"])
     profile = overall_profile(fake_draws)
     recent4 = [n for d in fake_draws[-WINDOW_RECENT:] for n in d["numbers"]]
-    runs4 = sum(1 for d in fake_draws[-WINDOW_RECENT:] if consecutive_runs(d["numbers"]))
-    want_run = profile["runRate"] * (WINDOW_RECENT + 1) - runs4 >= 0.5
     slots = len(recent4) + 6
     deficit_digits = {
         d for d in range(10)
@@ -494,11 +482,10 @@ def selftest() -> int:
     for rec in recs_a:
         nums = rec["numbers"]
         assert len(nums) == 6 and len(set(nums)) == 6 and all(1 <= n <= 45 for n in nums), nums
+        assert tuple(nums) not in {tuple(d["numbers"]) for d in fake_draws} | extra_forbidden
         reason = rec["reason"]
-        assert reason["carryOverNumbers"] and set(reason["carryOverNumbers"]) <= latest_numbers, reason
         assert reason["endingNumbers"] == [n for n in nums if n % 10 in deficit_digits], reason
         assert reason["consecutiveRuns"] == consecutive_runs(nums), reason
-        assert bool(consecutive_runs(nums)) == want_run, (nums, want_run)
 
     # 창 편차 검증: 창 비율이 전체 비율과 같으면 편차 0
     uniform_draws = [{"round": r, "numbers": [1, 2, 13, 24, 35, 41]} for r in range(1, 11)]
@@ -508,16 +495,17 @@ def selftest() -> int:
     assert recs_a == recs_b, "stat recommendations must be reproducible with same rng"
     assert len({tuple(r["numbers"]) for r in recs_a}) == STAT_SETS, "sets must be unique"
 
-    forbidden = {tuple(fake_draws[-1]["numbers"])}
-    candidates_a = generate_balanced_candidates(
+    first_candidate = generate_candidates(np.random.default_rng(SEED), 1)[0]
+    forbidden = {tuple(first_candidate)}
+    candidates_a = generate_candidates(
         np.random.default_rng(SEED), 20, forbidden
     )
-    candidates_b = generate_balanced_candidates(
+    candidates_b = generate_candidates(
         np.random.default_rng(SEED), 20, forbidden
     )
     assert candidates_a == candidates_b
     assert len(candidates_a) == len({tuple(c) for c in candidates_a}) == 20
-    assert all(is_balanced(c) for c in candidates_a)
+    assert any(not matches_legacy_balance(c) for c in candidates_a), "shape rules must not filter candidates"
     assert all(tuple(c) not in forbidden for c in candidates_a)
 
     sequences = np.stack(
@@ -530,7 +518,12 @@ def selftest() -> int:
     assert ex_seq.shape == (NEGATIVES_PER_POSITIVE + 1, 10, 45)
     assert ex_cand.shape == (NEGATIVES_PER_POSITIVE + 1, 45)
     assert ex_label.tolist() == [1.0] + [0.0] * NEGATIVES_PER_POSITIVE
-    assert all(is_balanced(multihot_to_numbers(v)) for v in ex_cand)
+    assert all(len(multihot_to_numbers(v)) == PICK for v in ex_cand)
+
+    weights = selection_weights(np.asarray([0.9, 0.0, -10.0]))
+    assert np.isclose(weights.sum(), 1.0)
+    assert np.all(weights > 0), weights
+    assert weights[0] > weights[1] > weights[2], weights
 
     scored_candidates = [
         [1, 8, 15, 22, 29, 36],
@@ -540,15 +533,13 @@ def selftest() -> int:
     selected = select_scored_recommendations(
         scored_candidates,
         np.asarray([0.9, 0.8, 0.7]),
+        np.random.default_rng(9),
     )
     assert [rec["method"] for rec in selected] == [
-        "lstm-combination-best",
-        "lstm-combination-diverse",
+        "lstm-weighted-selection",
+        "lstm-weighted-selection",
     ]
-    assert selected[0]["numbers"] == scored_candidates[0]
-    assert selected[1]["numbers"] == scored_candidates[1]
-    assert len(set(selected[0]["numbers"]) & set(selected[1]["numbers"])) <= 2
-    assert selected[0]["modelScore"] == 0.9
+    assert len({tuple(rec["numbers"]) for rec in selected}) == 2
 
     print("selftest ok")
     return 0
@@ -559,7 +550,7 @@ def main() -> int:
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
-    parser.add_argument("--selftest", action="store_true", help="이력 로직만 검증 (TF 불필요)")
+    parser.add_argument("--selftest", action="store_true", help="추천/이력 핵심 로직 검증 (TF 불필요)")
     args = parser.parse_args()
 
     if args.selftest:
@@ -581,20 +572,11 @@ def main() -> int:
             f"학습 샘플 부족: {len(x)} < {MIN_TRAIN_SAMPLES} (window={args.window})"
         )
 
-    balanced_mask = np.asarray(
-        [is_balanced(multihot_to_numbers(target)) for target in y]
-    )
-    balanced_x, balanced_y = x[balanced_mask], y[balanced_mask]
-    if len(balanced_x) < MIN_TRAIN_SAMPLES:
-        raise SystemExit(
-            f"균형 학습 샘플 부족: {len(balanced_x)} < {MIN_TRAIN_SAMPLES}"
-        )
-
-    split = int(len(balanced_x) * (1.0 - VALIDATION_FRACTION))
-    if split <= 0 or split >= len(balanced_x):
+    split = int(len(x) * (1.0 - VALIDATION_FRACTION))
+    if split <= 0 or split >= len(x):
         raise SystemExit("시간순 검증 구간을 만들 수 없습니다")
-    train_seq, train_pos = balanced_x[:split], balanced_y[:split]
-    val_seq, val_pos = balanced_x[split:], balanced_y[split:]
+    train_seq, train_pos = x[:split], y[:split]
+    val_seq, val_pos = x[split:], y[split:]
     train_x, train_candidates, train_labels = expand_scorer_examples(
         train_seq, train_pos, np.random.default_rng(SEED)
     )
@@ -623,7 +605,7 @@ def main() -> int:
 
     historical = {tuple(d["numbers"]) for d in draws}
     # ponytail: 50k 후보로 CI 비용을 제한하며, 백테스트가 불안정하면 수를 늘린다.
-    candidates = generate_balanced_candidates(
+    candidates = generate_candidates(
         np.random.default_rng(SEED + 2),
         INFERENCE_CANDIDATES,
         historical,
@@ -635,7 +617,10 @@ def main() -> int:
     scores = model.predict(
         [sequence_batch, candidate_vectors], batch_size=1024, verbose=0
     ).reshape(-1)
-    lstm_recommendations = select_scored_recommendations(candidates, scores)
+    lstm_recommendations = select_scored_recommendations(
+        candidates, scores, np.random.default_rng(SEED + 3)
+    )
+    selected_lstm = {tuple(rec["numbers"]) for rec in lstm_recommendations}
 
     result = {
         "schemaVersion": 2,
@@ -647,12 +632,14 @@ def main() -> int:
         .replace("+00:00", "Z"),
         "window": args.window,
         "epochs": int(len(history.history["loss"])),  # 실제 실행된 에폭 수
-        "trainSampleCount": int(len(balanced_x)),
+        "trainSampleCount": int(len(x)),
         "validationAuc": round(validation_auc, 4),
         "candidateCount": len(candidates),
         "recommendations": [
             *lstm_recommendations,
-            *stat_recommendations(draws, np.random.default_rng(SEED + 3)),
+            *stat_recommendations(
+                draws, np.random.default_rng(SEED + 4), forbidden=selected_lstm
+            ),
         ],
         "warning": WARNING,
     }
@@ -663,7 +650,7 @@ def main() -> int:
     )
     print(
         f"saved {OUT_PATH.name}: source={source_latest} target={target_round} "
-        f"balanced_samples={len(balanced_x)} epochs={result['epochs']} "
+        f"samples={len(x)} epochs={result['epochs']} "
         f"validation_auc={validation_auc:.4f} candidates={len(candidates)}"
     )
     return 0

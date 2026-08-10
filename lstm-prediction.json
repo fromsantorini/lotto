@@ -3,149 +3,136 @@
   "model": "keras-lstm-combination-scorer-v1",
   "sourceLatestRound": 1236,
   "targetRound": 1237,
-  "trainedAt": "2026-08-08T18:55:55Z",
+  "trainedAt": "2026-08-10T03:19:13Z",
   "window": 10,
-  "epochs": 9,
-  "trainSampleCount": 702,
-  "validationAuc": 0.4874,
+  "epochs": 10,
+  "trainSampleCount": 1226,
+  "validationAuc": 0.4854,
   "candidateCount": 50000,
   "recommendations": [
     {
-      "method": "lstm-combination-best",
-      "numbers": [
-        8,
-        12,
-        19,
-        24,
-        36,
-        45
-      ],
-      "modelScore": 0.305102
-    },
-    {
-      "method": "lstm-combination-diverse",
-      "numbers": [
-        8,
-        13,
-        19,
-        26,
-        37,
-        42
-      ],
-      "modelScore": 0.296871
-    },
-    {
-      "method": "balanced-statistical",
+      "method": "lstm-weighted-selection",
       "numbers": [
         6,
-        10,
-        12,
-        28,
+        13,
+        20,
         29,
-        43
-      ],
-      "reason": {
-        "oddEven": "2:4",
-        "lowHigh": "3:3",
-        "sum": 128,
-        "frequentNumbers": [
-          12,
-          28
-        ],
-        "coldNumbers": [
-          10,
-          43
-        ],
-        "carryOverNumbers": [
-          12,
-          29
-        ],
-        "endingNumbers": [
-          6,
-          12,
-          43
-        ],
-        "consecutiveRuns": [
-          [
-            28,
-            29
-          ]
-        ]
-      }
-    },
-    {
-      "method": "balanced-statistical",
-      "numbers": [
-        8,
-        14,
-        22,
-        27,
-        29,
-        30
-      ],
-      "reason": {
-        "oddEven": "2:4",
-        "lowHigh": "3:3",
-        "sum": 130,
-        "frequentNumbers": [
-          8,
-          27
-        ],
-        "coldNumbers": [
-          14,
-          22
-        ],
-        "carryOverNumbers": [
-          29
-        ],
-        "endingNumbers": [
-          14,
-          22
-        ],
-        "consecutiveRuns": [
-          [
-            29,
-            30
-          ]
-        ]
-      }
-    },
-    {
-      "method": "balanced-statistical",
-      "numbers": [
-        3,
-        10,
-        22,
-        28,
-        29,
+        43,
         44
       ],
+      "modelScore": 0.198354
+    },
+    {
+      "method": "lstm-weighted-selection",
+      "numbers": [
+        5,
+        24,
+        26,
+        30,
+        32,
+        33
+      ],
+      "modelScore": 0.150847
+    },
+    {
+      "method": "weighted-statistical",
+      "numbers": [
+        13,
+        14,
+        25,
+        26,
+        29,
+        32
+      ],
       "reason": {
-        "oddEven": "2:4",
-        "lowHigh": "3:3",
-        "sum": 136,
-        "frequentNumbers": [
-          3,
-          28
-        ],
+        "oddEven": "3:3",
+        "lowHigh": "2:4",
+        "sum": 139,
+        "frequentNumbers": [],
         "coldNumbers": [
-          10,
-          22
+          14,
+          32
         ],
         "carryOverNumbers": [
           29
         ],
         "endingNumbers": [
-          3,
-          22,
-          44
+          13,
+          14,
+          26,
+          32
         ],
         "consecutiveRuns": [
           [
-            28,
-            29
+            13,
+            14
+          ],
+          [
+            25,
+            26
           ]
         ]
+      }
+    },
+    {
+      "method": "weighted-statistical",
+      "numbers": [
+        1,
+        10,
+        11,
+        20,
+        39,
+        41
+      ],
+      "reason": {
+        "oddEven": "4:2",
+        "lowHigh": "4:2",
+        "sum": 122,
+        "frequentNumbers": [],
+        "coldNumbers": [
+          10,
+          41
+        ],
+        "carryOverNumbers": [],
+        "endingNumbers": [],
+        "consecutiveRuns": [
+          [
+            10,
+            11
+          ]
+        ]
+      }
+    },
+    {
+      "method": "weighted-statistical",
+      "numbers": [
+        4,
+        10,
+        13,
+        21,
+        25,
+        38
+      ],
+      "reason": {
+        "oddEven": "3:3",
+        "lowHigh": "4:2",
+        "sum": 111,
+        "frequentNumbers": [
+          38
+        ],
+        "coldNumbers": [
+          10,
+          21
+        ],
+        "carryOverNumbers": [
+          21,
+          38
+        ],
+        "endingNumbers": [
+          4,
+          13
+        ],
+        "consecutiveRuns": []
       }
     }
   ],

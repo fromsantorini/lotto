@@ -190,8 +190,8 @@
     .ball.n4 { background: #6e7781; }
     .ball.n5 { background: #168a53; }
     .ball.hit {
-      outline: 4px solid #f2b705;
-      box-shadow: 0 0 0 2px #fff, 0 0 14px #f2b705;
+      outline: 4px solid #ff2d95;
+      box-shadow: 0 0 0 2px #fff, 0 0 14px #ff2d95;
     }
     .ball.bonus-hit {
       outline: 4px solid #8250df;
@@ -1444,6 +1444,8 @@
       if (method === "lstm-combination-best") return "LSTM 최고 점수 조합";
       if (method === "lstm-combination-diverse") return "LSTM 다양성 조합";
       if (method === "balanced-statistical") return "통계 균형 조합";
+      if (method === "lstm-weighted-selection") return "LSTM 가중 선택 조합";
+      if (method === "weighted-statistical") return "통계 가중 선택 조합";
       return method;
     }
 

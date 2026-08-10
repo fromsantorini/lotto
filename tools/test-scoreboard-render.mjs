@@ -3,6 +3,10 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const htmlSource = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+assert.ok(
+  htmlSource.includes("outline: 4px solid #ff2d95"),
+  "main-hit outline must use a high-contrast magenta",
+);
 const script = htmlSource.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(script, "index.html script not found");
 
@@ -59,5 +63,7 @@ assert.ok(!panel.innerHTML.includes("실제 당첨 번호"), "duplicate actual d
 assert.ok(panel.innerHTML.includes('<span class="ball n1 hit">1</span>'), "main hit must be highlighted");
 assert.ok(panel.innerHTML.includes('<span class="ball n1 bonus-hit">7</span>'), "bonus hit must be highlighted");
 assert.ok(panel.innerHTML.includes('<span class="ball n1">8</span>'), "unmatched ball must keep its normal class");
+assert.ok(htmlSource.includes('return "LSTM 가중 선택 조합"'), "weighted LSTM label must be available");
+assert.ok(htmlSource.includes('return "통계 가중 선택 조합"'), "weighted statistical label must be available");
 
 console.log("scoreboard render check passed");
