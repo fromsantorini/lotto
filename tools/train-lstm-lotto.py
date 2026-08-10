@@ -99,7 +99,7 @@ def build_dataset(vectors: np.ndarray, window: int):
 STAT_WINDOW = 100   # 강세/소외 판정에 쓰는 최근 회차 수
 STAT_SETS = 3
 WINDOW_RECENT = 4   # 보정 창: 최근 4회 + 이번 추천 = 5회
-STAT_POOL = 40      # 창 편차 비교용 후보 풀 크기
+STAT_POOL = 10_000  # 통계 가중 선택용 무작위 후보 풀 크기
 NUMBER_ZONES = [(1, 10), (11, 20), (21, 30), (31, 40), (41, 45)]
 
 

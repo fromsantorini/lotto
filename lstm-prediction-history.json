@@ -4,7 +4,7 @@
     {
       "targetRound": 1237,
       "sourceLatestRound": 1236,
-      "trainedAt": "2026-08-10T03:19:13Z",
+      "trainedAt": "2026-08-10T05:53:01Z",
       "recommendations": [
         {
           "method": "lstm-weighted-selection",
@@ -33,68 +33,38 @@
         {
           "method": "weighted-statistical",
           "numbers": [
-            13,
-            14,
-            25,
-            26,
-            29,
-            32
-          ],
-          "reason": {
-            "oddEven": "3:3",
-            "lowHigh": "2:4",
-            "sum": 139,
-            "frequentNumbers": [],
-            "coldNumbers": [
-              14,
-              32
-            ],
-            "carryOverNumbers": [
-              29
-            ],
-            "endingNumbers": [
-              13,
-              14,
-              26,
-              32
-            ],
-            "consecutiveRuns": [
-              [
-                13,
-                14
-              ],
-              [
-                25,
-                26
-              ]
-            ]
-          }
-        },
-        {
-          "method": "weighted-statistical",
-          "numbers": [
-            1,
-            10,
-            11,
-            20,
-            39,
-            41
+            3,
+            21,
+            22,
+            32,
+            35,
+            37
           ],
           "reason": {
             "oddEven": "4:2",
-            "lowHigh": "4:2",
-            "sum": 122,
-            "frequentNumbers": [],
-            "coldNumbers": [
-              10,
-              41
+            "lowHigh": "3:3",
+            "sum": 150,
+            "frequentNumbers": [
+              3,
+              37
             ],
-            "carryOverNumbers": [],
-            "endingNumbers": [],
+            "coldNumbers": [
+              21,
+              22,
+              32
+            ],
+            "carryOverNumbers": [
+              21
+            ],
+            "endingNumbers": [
+              3,
+              22,
+              32
+            ],
             "consecutiveRuns": [
               [
-                10,
-                11
+                21,
+                22
               ]
             ]
           }
@@ -102,33 +72,74 @@
         {
           "method": "weighted-statistical",
           "numbers": [
-            4,
-            10,
-            13,
-            21,
-            25,
+            6,
+            7,
+            9,
+            11,
+            41,
+            43
+          ],
+          "reason": {
+            "oddEven": "5:1",
+            "lowHigh": "4:2",
+            "sum": 117,
+            "frequentNumbers": [
+              7,
+              9
+            ],
+            "coldNumbers": [
+              41,
+              43
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [
+              6,
+              43
+            ],
+            "consecutiveRuns": [
+              [
+                6,
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            2,
+            18,
+            23,
+            24,
+            35,
             38
           ],
           "reason": {
-            "oddEven": "3:3",
-            "lowHigh": "4:2",
-            "sum": 111,
+            "oddEven": "2:4",
+            "lowHigh": "2:4",
+            "sum": 140,
             "frequentNumbers": [
               38
             ],
             "coldNumbers": [
-              10,
-              21
+              2,
+              23
             ],
             "carryOverNumbers": [
-              21,
+              18,
               38
             ],
             "endingNumbers": [
-              4,
-              13
+              2,
+              23,
+              24
             ],
-            "consecutiveRuns": []
+            "consecutiveRuns": [
+              [
+                23,
+                24
+              ]
+            ]
           }
         }
       ],
