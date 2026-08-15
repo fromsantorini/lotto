@@ -2,6 +2,136 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "targetRound": 1238,
+      "sourceLatestRound": 1237,
+      "trainedAt": "2026-08-15T14:15:21Z",
+      "recommendations": [
+        {
+          "method": "lstm-weighted-selection",
+          "numbers": [
+            6,
+            12,
+            17,
+            26,
+            38,
+            45
+          ],
+          "modelScore": 0.211504
+        },
+        {
+          "method": "lstm-weighted-selection",
+          "numbers": [
+            5,
+            20,
+            22,
+            27,
+            32,
+            43
+          ],
+          "modelScore": 0.169571
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            3,
+            19,
+            22,
+            23,
+            29,
+            45
+          ],
+          "reason": {
+            "oddEven": "5:1",
+            "lowHigh": "3:3",
+            "sum": 141,
+            "frequentNumbers": [
+              3
+            ],
+            "coldNumbers": [
+              22
+            ],
+            "carryOverNumbers": [
+              23
+            ],
+            "endingNumbers": [
+              22
+            ],
+            "consecutiveRuns": [
+              [
+                22,
+                23
+              ]
+            ]
+          }
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            5,
+            19,
+            21,
+            27,
+            35,
+            38
+          ],
+          "reason": {
+            "oddEven": "5:1",
+            "lowHigh": "3:3",
+            "sum": 145,
+            "frequentNumbers": [
+              27,
+              38
+            ],
+            "coldNumbers": [
+              5,
+              21
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            2,
+            17,
+            18,
+            32,
+            37,
+            42
+          ],
+          "reason": {
+            "oddEven": "2:4",
+            "lowHigh": "3:3",
+            "sum": 148,
+            "frequentNumbers": [
+              37
+            ],
+            "coldNumbers": [
+              2,
+              32
+            ],
+            "carryOverNumbers": [
+              37
+            ],
+            "endingNumbers": [
+              2,
+              32,
+              42
+            ],
+            "consecutiveRuns": [
+              [
+                17,
+                18
+              ]
+            ]
+          }
+        }
+      ],
+      "result": null
+    },
+    {
       "targetRound": 1237,
       "sourceLatestRound": 1236,
       "trainedAt": "2026-08-10T05:53:01Z",
@@ -143,7 +273,45 @@
           }
         }
       ],
-      "result": null
+      "result": {
+        "date": "2026-08-15",
+        "winningNumbers": [
+          10,
+          20,
+          23,
+          34,
+          37,
+          40
+        ],
+        "bonus": 36,
+        "matches": [
+          {
+            "method": "lstm-weighted-selection",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "lstm-weighted-selection",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 1,
+            "bonusMatched": false
+          }
+        ]
+      }
     },
     {
       "targetRound": 1236,
