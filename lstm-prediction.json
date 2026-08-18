@@ -3,12 +3,21 @@
   "model": "keras-lstm-combination-scorer-v1",
   "sourceLatestRound": 1237,
   "targetRound": 1238,
-  "trainedAt": "2026-08-15T14:15:21Z",
+  "trainedAt": "2026-08-18T07:41:22Z",
   "window": 10,
   "epochs": 9,
   "trainSampleCount": 1227,
   "validationAuc": 0.4653,
   "candidateCount": 50000,
+  "backtest": {
+    "metric": "mean-matches-per-set",
+    "testedRounds": 1037,
+    "selectedMethod": "frequency-window",
+    "selectedWindow": 200,
+    "selectedHalfLife": null,
+    "meanMatches": 0.8222,
+    "randomBaseline": 0.7938
+  },
   "recommendations": [
     {
       "method": "lstm-weighted-selection",
@@ -131,6 +140,61 @@
           ]
         ]
       }
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        1,
+        15,
+        19,
+        21,
+        28,
+        38
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        5,
+        7,
+        13,
+        38,
+        39,
+        40
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        6,
+        16,
+        18,
+        19,
+        43,
+        44
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        9,
+        12,
+        15,
+        22,
+        23,
+        39
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        13,
+        20,
+        21,
+        27,
+        32,
+        45
+      ]
     }
   ],
   "warning": "모델 점수는 후보 간 상대 비교값이며 당첨 확률이 아닙니다. 로또는 독립시행이므로 이 결과는 실험용입니다."
