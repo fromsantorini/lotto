@@ -695,6 +695,13 @@ def selftest() -> int:
         for rec in backtest_a
     )
 
+    synthetic_draws = [
+        {"round": r, "numbers": [1, 2, 3, 4, 5, 6]}
+        for r in range(1, 221)
+    ]
+    synthetic_summary, _ = build_backtest_recommendations(synthetic_draws)
+    assert synthetic_summary["selectedMethod"] == "frequency-all"
+
     scores_with_future = evaluate_backtest_round(backtest_draws, 205)
     scores_without_future = evaluate_backtest_round(backtest_draws[:206], 205)
     assert np.array_equal(scores_with_future, scores_without_future)
