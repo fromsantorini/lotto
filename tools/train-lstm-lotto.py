@@ -101,6 +101,16 @@ STAT_SETS = 3
 WINDOW_RECENT = 4   # 보정 창: 최근 4회 + 이번 추천 = 5회
 STAT_POOL = 10_000  # 통계 가중 선택용 무작위 후보 풀 크기
 NUMBER_ZONES = [(1, 10), (11, 20), (21, 30), (31, 40), (41, 45)]
+BACKTEST_SETS = 5
+BACKTEST_MIN_HISTORY = 200
+BACKTEST_WINDOWS = (10, 25, 50, 100, 200)
+BACKTEST_HALF_LIVES = (10, 25, 50, 100, 200)
+BACKTEST_METHODS = (
+    ("uniform", None),
+    ("frequency-all", None),
+    *(("frequency-window", window) for window in BACKTEST_WINDOWS),
+    *(("frequency-decay", half_life) for half_life in BACKTEST_HALF_LIVES),
+)
 
 
 def consecutive_runs(nums: list[int]) -> list[list[int]]:
@@ -298,6 +308,118 @@ def stat_recommendations(
             }
         )
     return recs
+
+
+def backtest_method_weights(
+    draws: list[dict], kind: str, parameter: int | None
+) -> np.ndarray:
+    weights = np.ones(NUM_RANGE, dtype=np.float64)
+    if kind == "uniform":
+        return weights
+    if kind == "frequency-window":
+        selected = draws[-int(parameter):]
+        for draw in selected:
+            for number in draw["numbers"]:
+                weights[number - 1] += 1.0
+        return weights
+    if kind == "frequency-decay":
+        for age, draw in enumerate(reversed(draws)):
+            contribution = 2.0 ** (-age / int(parameter))
+            for number in draw["numbers"]:
+                weights[number - 1] += contribution
+        return weights
+    if kind == "frequency-all":
+        for draw in draws:
+            for number in draw["numbers"]:
+                weights[number - 1] += 1.0
+        return weights
+    raise ValueError(f"unknown backtest method: {kind}")
+
+
+def generate_weighted_sets(
+    weights: np.ndarray,
+    rng: np.random.Generator,
+    count: int,
+    forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
+) -> list[list[int]]:
+    probabilities = np.asarray(weights, dtype=np.float64)
+    if probabilities.shape != (NUM_RANGE,) or np.any(probabilities <= 0):
+        raise ValueError("45 positive number weights required")
+    probabilities = probabilities / probabilities.sum()
+    selected: set[tuple[int, ...]] = set()
+    for _ in range(count * MAX_CANDIDATE_ATTEMPT_FACTOR):
+        numbers = tuple(
+            sorted(
+                int(i) + 1
+                for i in rng.choice(
+                    NUM_RANGE, PICK, replace=False, p=probabilities
+                )
+            )
+        )
+        if numbers not in forbidden:
+            selected.add(numbers)
+            if len(selected) == count:
+                return [list(numbers) for numbers in sorted(selected)]
+    raise RuntimeError(f"weighted recommendation shortage: {len(selected)} < {count}")
+
+
+def choose_backtest_method(means: np.ndarray) -> int:
+    values = np.asarray(means, dtype=np.float64)
+    winner = int(np.argmax(values))
+    return winner if values[winner] > values[0] and values[winner] > 0.8 else 0
+
+
+def evaluate_backtest_round(draws: list[dict], target_index: int) -> np.ndarray:
+    history = draws[:target_index]
+    winning = set(draws[target_index]["numbers"])
+    forbidden = {tuple(draw["numbers"]) for draw in history}
+    scores = np.zeros(len(BACKTEST_METHODS), dtype=np.float64)
+    for method_index, (kind, parameter) in enumerate(BACKTEST_METHODS):
+        sets = generate_weighted_sets(
+            backtest_method_weights(history, kind, parameter),
+            np.random.default_rng(
+                SEED + draws[target_index]["round"] * 100 + method_index
+            ),
+            BACKTEST_SETS,
+            forbidden,
+        )
+        scores[method_index] = sum(
+            len(winning & set(numbers)) for numbers in sets
+        )
+    return scores
+
+
+def build_backtest_recommendations(draws: list[dict]) -> tuple[dict, list[dict]]:
+    totals = np.zeros(len(BACKTEST_METHODS), dtype=np.float64)
+    tested_rounds = max(0, len(draws) - BACKTEST_MIN_HISTORY)
+    for target_index in range(BACKTEST_MIN_HISTORY, len(draws)):
+        totals += evaluate_backtest_round(draws, target_index)
+
+    means = totals / (tested_rounds * BACKTEST_SETS) if tested_rounds else totals
+    selected_index = choose_backtest_method(means) if tested_rounds else 0
+    selected_kind, selected_parameter = BACKTEST_METHODS[selected_index]
+    historical = {tuple(draw["numbers"]) for draw in draws}
+    numbers = generate_weighted_sets(
+        backtest_method_weights(draws, selected_kind, selected_parameter),
+        np.random.default_rng(
+            SEED + (draws[-1]["round"] + 1) * 100 + selected_index
+        ),
+        BACKTEST_SETS,
+        historical,
+    )
+    summary = {
+        "metric": "mean-matches-per-set",
+        "testedRounds": tested_rounds,
+        "selectedMethod": selected_kind,
+        "selectedWindow": selected_parameter if selected_kind == "frequency-window" else None,
+        "selectedHalfLife": selected_parameter if selected_kind == "frequency-decay" else None,
+        "meanMatches": round(float(means[selected_index]), 4) if tested_rounds else None,
+        "randomBaseline": round(float(means[0]), 4) if tested_rounds else None,
+    }
+    return summary, [
+        {"method": "walk-forward-backtest", "numbers": recommendation}
+        for recommendation in numbers
+    ]
 
 
 # --- 예측 이력(성적표) 관리 ---------------------------------------------------
@@ -541,6 +663,47 @@ def selftest() -> int:
     ]
     assert len({tuple(rec["numbers"]) for rec in selected}) == 2
 
+    assert choose_backtest_method(np.asarray([0.79, 0.81, 0.9])) == 2
+    assert choose_backtest_method(np.asarray([0.81, 0.80, 0.79])) == 0
+    assert choose_backtest_method(np.asarray([0.8, 0.8, 0.8])) == 0
+
+    backtest_draws = [
+        {
+            "round": r,
+            "numbers": sorted(
+                int(n) + 1
+                for n in np.random.default_rng(SEED + r).choice(45, size=6, replace=False)
+            ),
+        }
+        for r in range(1, 221)
+    ]
+    summary_a, backtest_a = build_backtest_recommendations(backtest_draws)
+    summary_b, backtest_b = build_backtest_recommendations(backtest_draws)
+    historical_backtest = {tuple(d["numbers"]) for d in backtest_draws}
+    assert summary_a == summary_b
+    assert backtest_a == backtest_b
+    assert summary_a["metric"] == "mean-matches-per-set"
+    assert summary_a["testedRounds"] == 20
+    assert len(backtest_a) == BACKTEST_SETS
+    assert len({tuple(rec["numbers"]) for rec in backtest_a}) == BACKTEST_SETS
+    assert all(rec["method"] == "walk-forward-backtest" for rec in backtest_a)
+    assert all(tuple(rec["numbers"]) not in historical_backtest for rec in backtest_a)
+    assert all(
+        len(rec["numbers"]) == PICK
+        and len(set(rec["numbers"])) == PICK
+        and all(1 <= n <= NUM_RANGE for n in rec["numbers"])
+        for rec in backtest_a
+    )
+
+    scores_with_future = evaluate_backtest_round(backtest_draws, 205)
+    scores_without_future = evaluate_backtest_round(backtest_draws[:206], 205)
+    assert np.array_equal(scores_with_future, scores_without_future)
+
+    fallback_summary, fallback_recs = build_backtest_recommendations(backtest_draws[:100])
+    assert fallback_summary["selectedMethod"] == "uniform"
+    assert fallback_summary["testedRounds"] == 0
+    assert len(fallback_recs) == BACKTEST_SETS
+
     print("selftest ok")
     return 0
 
@@ -621,6 +784,7 @@ def main() -> int:
         candidates, scores, np.random.default_rng(SEED + 3)
     )
     selected_lstm = {tuple(rec["numbers"]) for rec in lstm_recommendations}
+    backtest, backtest_recommendations = build_backtest_recommendations(draws)
 
     result = {
         "schemaVersion": 2,
@@ -635,11 +799,13 @@ def main() -> int:
         "trainSampleCount": int(len(x)),
         "validationAuc": round(validation_auc, 4),
         "candidateCount": len(candidates),
+        "backtest": backtest,
         "recommendations": [
             *lstm_recommendations,
             *stat_recommendations(
                 draws, np.random.default_rng(SEED + 4), forbidden=selected_lstm
             ),
+            *backtest_recommendations,
         ],
         "warning": WARNING,
     }
