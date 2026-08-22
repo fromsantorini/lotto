@@ -2,6 +2,195 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "targetRound": 1239,
+      "sourceLatestRound": 1238,
+      "trainedAt": "2026-08-22T14:14:16Z",
+      "recommendations": [
+        {
+          "method": "lstm-weighted-selection",
+          "numbers": [
+            6,
+            12,
+            20,
+            37,
+            39,
+            43
+          ],
+          "modelScore": 0.198756
+        },
+        {
+          "method": "lstm-weighted-selection",
+          "numbers": [
+            5,
+            21,
+            26,
+            29,
+            39,
+            45
+          ],
+          "modelScore": 0.197847
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            3,
+            21,
+            22,
+            32,
+            35,
+            37
+          ],
+          "reason": {
+            "oddEven": "4:2",
+            "lowHigh": "3:3",
+            "sum": 150,
+            "frequentNumbers": [
+              3,
+              37
+            ],
+            "coldNumbers": [
+              21,
+              22
+            ],
+            "carryOverNumbers": [
+              32
+            ],
+            "endingNumbers": [
+              21,
+              35
+            ],
+            "consecutiveRuns": [
+              [
+                21,
+                22
+              ]
+            ]
+          }
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            5,
+            19,
+            24,
+            27,
+            36,
+            45
+          ],
+          "reason": {
+            "oddEven": "4:2",
+            "lowHigh": "2:4",
+            "sum": 156,
+            "frequentNumbers": [
+              27
+            ],
+            "coldNumbers": [
+              5,
+              45
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [
+              5,
+              24,
+              36,
+              45
+            ],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "weighted-statistical",
+          "numbers": [
+            2,
+            18,
+            23,
+            24,
+            35,
+            37
+          ],
+          "reason": {
+            "oddEven": "3:3",
+            "lowHigh": "2:4",
+            "sum": 139,
+            "frequentNumbers": [
+              37
+            ],
+            "coldNumbers": [],
+            "carryOverNumbers": [
+              2,
+              18
+            ],
+            "endingNumbers": [
+              24,
+              35
+            ],
+            "consecutiveRuns": [
+              [
+                23,
+                24
+              ]
+            ]
+          }
+        },
+        {
+          "method": "walk-forward-backtest",
+          "numbers": [
+            3,
+            15,
+            19,
+            28,
+            31,
+            34
+          ]
+        },
+        {
+          "method": "walk-forward-backtest",
+          "numbers": [
+            4,
+            12,
+            25,
+            28,
+            37,
+            43
+          ]
+        },
+        {
+          "method": "walk-forward-backtest",
+          "numbers": [
+            11,
+            19,
+            23,
+            26,
+            28,
+            40
+          ]
+        },
+        {
+          "method": "walk-forward-backtest",
+          "numbers": [
+            13,
+            16,
+            22,
+            27,
+            28,
+            32
+          ]
+        },
+        {
+          "method": "walk-forward-backtest",
+          "numbers": [
+            18,
+            21,
+            26,
+            27,
+            41,
+            42
+          ]
+        }
+      ],
+      "result": null
+    },
+    {
       "targetRound": 1238,
       "sourceLatestRound": 1237,
       "trainedAt": "2026-08-18T07:41:22Z",
@@ -184,7 +373,70 @@
           ]
         }
       ],
-      "result": null
+      "result": {
+        "date": "2026-08-22",
+        "winningNumbers": [
+          2,
+          13,
+          18,
+          32,
+          38,
+          42
+        ],
+        "bonus": 22,
+        "matches": [
+          {
+            "method": "lstm-weighted-selection",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "lstm-weighted-selection",
+            "matchCount": 1,
+            "bonusMatched": true
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 0,
+            "bonusMatched": true
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical",
+            "matchCount": 4,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest",
+            "matchCount": 2,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest",
+            "matchCount": 0,
+            "bonusMatched": true
+          },
+          {
+            "method": "walk-forward-backtest",
+            "matchCount": 2,
+            "bonusMatched": false
+          }
+        ]
+      }
     },
     {
       "targetRound": 1237,
