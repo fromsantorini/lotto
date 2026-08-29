@@ -1,81 +1,81 @@
 {
   "schemaVersion": 2,
   "model": "keras-lstm-combination-scorer-v1",
-  "sourceLatestRound": 1238,
-  "targetRound": 1239,
-  "trainedAt": "2026-08-22T14:14:16Z",
+  "sourceLatestRound": 1239,
+  "targetRound": 1240,
+  "trainedAt": "2026-08-29T17:28:23Z",
   "window": 10,
-  "epochs": 9,
-  "trainSampleCount": 1228,
-  "validationAuc": 0.4833,
+  "epochs": 12,
+  "trainSampleCount": 1229,
+  "validationAuc": 0.5057,
   "candidateCount": 50000,
   "backtest": {
     "metric": "mean-matches-per-set",
-    "testedRounds": 1038,
+    "testedRounds": 1039,
     "selectedMethod": "frequency-window",
     "selectedWindow": 200,
     "selectedHalfLife": null,
     "meanMatches": 0.8225,
-    "randomBaseline": 0.794
+    "randomBaseline": 0.7944
   },
   "recommendations": [
     {
       "method": "lstm-weighted-selection",
       "numbers": [
         6,
-        12,
-        20,
-        37,
-        39,
-        43
+        15,
+        19,
+        25,
+        27,
+        45
       ],
-      "modelScore": 0.198756
+      "modelScore": 0.264535
     },
     {
       "method": "lstm-weighted-selection",
       "numbers": [
-        5,
-        21,
-        26,
-        29,
-        39,
-        45
+        6,
+        8,
+        13,
+        24,
+        25,
+        43
       ],
-      "modelScore": 0.197847
+      "modelScore": 0.276258
     },
     {
       "method": "weighted-statistical",
       "numbers": [
         3,
+        19,
         21,
-        22,
-        32,
-        35,
-        37
+        29,
+        30,
+        31
       ],
       "reason": {
-        "oddEven": "4:2",
+        "oddEven": "5:1",
         "lowHigh": "3:3",
-        "sum": 150,
+        "sum": 133,
         "frequentNumbers": [
           3,
-          37
+          31
         ],
         "coldNumbers": [
-          21,
-          22
+          21
         ],
-        "carryOverNumbers": [
-          32
-        ],
+        "carryOverNumbers": [],
         "endingNumbers": [
+          19,
           21,
-          35
+          29,
+          31
         ],
         "consecutiveRuns": [
           [
-            21,
-            22
+            29,
+            30,
+            31
           ]
         ]
       }
@@ -84,63 +84,70 @@
       "method": "weighted-statistical",
       "numbers": [
         5,
-        19,
-        24,
-        27,
-        36,
-        45
+        16,
+        30,
+        37,
+        38,
+        43
       ],
       "reason": {
-        "oddEven": "4:2",
+        "oddEven": "3:3",
         "lowHigh": "2:4",
-        "sum": 156,
+        "sum": 169,
         "frequentNumbers": [
-          27
+          16,
+          37,
+          38
         ],
         "coldNumbers": [
           5,
-          45
+          43
         ],
         "carryOverNumbers": [],
         "endingNumbers": [
           5,
-          24,
-          36,
-          45
+          16,
+          37
         ],
-        "consecutiveRuns": []
+        "consecutiveRuns": [
+          [
+            37,
+            38
+          ]
+        ]
       }
     },
     {
       "method": "weighted-statistical",
       "numbers": [
         2,
-        18,
-        23,
-        24,
-        35,
-        37
+        16,
+        26,
+        34,
+        39,
+        40
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "1:5",
         "lowHigh": "2:4",
-        "sum": 139,
+        "sum": 157,
         "frequentNumbers": [
-          37
+          16
         ],
-        "coldNumbers": [],
-        "carryOverNumbers": [
-          2,
-          18
+        "coldNumbers": [
+          34
         ],
+        "carryOverNumbers": [],
         "endingNumbers": [
-          24,
-          35
+          16,
+          26,
+          34,
+          39
         ],
         "consecutiveRuns": [
           [
-            23,
-            24
+            39,
+            40
           ]
         ]
       }
@@ -148,56 +155,56 @@
     {
       "method": "walk-forward-backtest",
       "numbers": [
-        3,
-        15,
-        19,
-        28,
-        31,
-        34
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        4,
-        12,
-        25,
-        28,
-        37,
-        43
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        11,
-        19,
-        23,
-        26,
-        28,
-        40
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        13,
-        16,
+        1,
+        14,
         22,
+        26,
         27,
-        28,
-        32
+        28
       ]
     },
     {
       "method": "walk-forward-backtest",
       "numbers": [
-        18,
-        21,
-        26,
+        2,
+        6,
+        11,
+        12,
+        29,
+        37
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        6,
+        8,
+        16,
         27,
-        41,
-        42
+        31,
+        35
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        6,
+        13,
+        15,
+        27,
+        37,
+        38
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        6,
+        19,
+        22,
+        28,
+        33,
+        38
       ]
     }
   ],
