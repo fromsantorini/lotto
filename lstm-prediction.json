@@ -1,17 +1,17 @@
 {
   "schemaVersion": 2,
   "model": "keras-lstm-combination-scorer-v1",
-  "sourceLatestRound": 1239,
-  "targetRound": 1240,
-  "trainedAt": "2026-08-29T17:28:23Z",
+  "sourceLatestRound": 1240,
+  "targetRound": 1241,
+  "trainedAt": "2026-09-05T16:26:06Z",
   "window": 10,
-  "epochs": 12,
-  "trainSampleCount": 1229,
-  "validationAuc": 0.5057,
+  "epochs": 9,
+  "trainSampleCount": 1230,
+  "validationAuc": 0.4847,
   "candidateCount": 50000,
   "backtest": {
     "metric": "mean-matches-per-set",
-    "testedRounds": 1039,
+    "testedRounds": 1040,
     "selectedMethod": "frequency-window",
     "selectedWindow": 200,
     "selectedHalfLife": null,
@@ -23,91 +23,53 @@
       "method": "lstm-weighted-selection",
       "numbers": [
         6,
-        15,
-        19,
-        25,
-        27,
-        45
+        14,
+        17,
+        20,
+        26,
+        37
       ],
-      "modelScore": 0.264535
+      "modelScore": 0.219254
     },
     {
       "method": "lstm-weighted-selection",
       "numbers": [
         6,
-        8,
-        13,
-        24,
-        25,
-        43
+        7,
+        9,
+        12,
+        23,
+        44
       ],
-      "modelScore": 0.276258
+      "modelScore": 0.147758
     },
     {
       "method": "weighted-statistical",
       "numbers": [
         3,
-        19,
         21,
-        29,
-        30,
-        31
-      ],
-      "reason": {
-        "oddEven": "5:1",
-        "lowHigh": "3:3",
-        "sum": 133,
-        "frequentNumbers": [
-          3,
-          31
-        ],
-        "coldNumbers": [
-          21
-        ],
-        "carryOverNumbers": [],
-        "endingNumbers": [
-          19,
-          21,
-          29,
-          31
-        ],
-        "consecutiveRuns": [
-          [
-            29,
-            30,
-            31
-          ]
-        ]
-      }
-    },
-    {
-      "method": "weighted-statistical",
-      "numbers": [
-        5,
-        16,
-        30,
         37,
         38,
-        43
+        40,
+        45
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "4:2",
         "lowHigh": "2:4",
-        "sum": 169,
+        "sum": 184,
         "frequentNumbers": [
-          16,
+          3,
           37,
           38
         ],
         "coldNumbers": [
-          5,
-          43
+          21,
+          45
         ],
         "carryOverNumbers": [],
         "endingNumbers": [
-          5,
-          16,
-          37
+          37,
+          45
         ],
         "consecutiveRuns": [
           [
@@ -120,90 +82,122 @@
     {
       "method": "weighted-statistical",
       "numbers": [
-        2,
-        16,
-        26,
-        34,
-        39,
-        40
+        5,
+        18,
+        24,
+        25,
+        31,
+        36
       ],
       "reason": {
-        "oddEven": "1:5",
+        "oddEven": "3:3",
         "lowHigh": "2:4",
-        "sum": 157,
+        "sum": 139,
         "frequentNumbers": [
-          16
+          31
         ],
         "coldNumbers": [
+          5
+        ],
+        "carryOverNumbers": [
+          31
+        ],
+        "endingNumbers": [
+          5,
+          24,
+          25,
+          36
+        ],
+        "consecutiveRuns": [
+          [
+            24,
+            25
+          ]
+        ]
+      }
+    },
+    {
+      "method": "weighted-statistical",
+      "numbers": [
+        2,
+        18,
+        21,
+        28,
+        34,
+        37
+      ],
+      "reason": {
+        "oddEven": "2:4",
+        "lowHigh": "3:3",
+        "sum": 140,
+        "frequentNumbers": [
+          28,
+          37
+        ],
+        "coldNumbers": [
+          21,
           34
         ],
         "carryOverNumbers": [],
         "endingNumbers": [
-          16,
-          26,
           34,
-          39
+          37
         ],
-        "consecutiveRuns": [
-          [
-            39,
-            40
-          ]
-        ]
+        "consecutiveRuns": []
       }
     },
     {
       "method": "walk-forward-backtest",
       "numbers": [
         1,
-        14,
-        22,
-        26,
-        27,
-        28
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        2,
-        6,
-        11,
-        12,
-        29,
-        37
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        6,
-        8,
-        16,
-        27,
-        31,
-        35
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        6,
-        13,
-        15,
-        27,
-        37,
-        38
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        6,
+        7,
         19,
-        22,
-        28,
+        29,
         33,
+        44
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        4,
+        14,
+        24,
+        29,
+        36,
+        45
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        5,
+        9,
+        20,
+        25,
+        30,
+        44
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        5,
+        13,
+        14,
+        20,
+        23,
+        24
+      ]
+    },
+    {
+      "method": "walk-forward-backtest",
+      "numbers": [
+        7,
+        13,
+        29,
+        32,
+        35,
         38
       ]
     }
