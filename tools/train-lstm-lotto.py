@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """LSTM 로또 실험 학습/예측 스크립트.
 
-lotto-data.json 을 읽어 직전 W회차에서 번호별 출현 점수를 학습하고,
+lotto-data.json 을 읽어 회차 순서와 LSTM 상태를 유지하며 번호별 출현 점수를 학습하고,
 중복 없는 추천과 시간순 평가를 lstm-prediction.json 으로 저장한다.
 
 주의: 공정한 독립 추첨에서는 과거 번호만으로 다음 당첨번호의 예측 우위를
@@ -21,9 +21,9 @@ import numpy as np
 SEED = 42
 NUM_RANGE = 45          # 번호 1..45
 PICK = 6                # 한 세트 번호 개수
-DEFAULT_WINDOW = 10     # 입력 시퀀스 길이 (직전 W회차)
+DEFAULT_WINDOW = 1      # 회차당 한 스텝, 이전 회차 정보는 LSTM 상태로 전달
 DEFAULT_EPOCHS = 100
-DEFAULT_BATCH = 16
+DEFAULT_BATCH = 1
 MIN_TRAIN_SAMPLES = 50  # 이보다 적으면 학습 의미가 없어 중단
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,7 +35,9 @@ HISTORY_LIMIT = 200  # 이력 최대 보관 회차 수
 VALIDATION_FRACTION = 0.1
 MAX_CANDIDATE_ATTEMPT_FACTOR = 100
 
-MODEL_NAME = "keras-lstm-number-scorer-v2"
+MODEL_NAME = "keras-stateful-lstm-tykimos-v3"
+LSTM_METHOD = "lstm-stateful-ball-weighted-v3"
+REFERENCE_URL = "https://tykimos.github.io/2020/01/25/keras_lstm_lotto_v895/"
 WARNING = (
     "번호별 모델 점수는 추천 가중치이며 조합의 당첨 확률이 아닙니다. "
     "로또는 독립시행이므로 이 결과는 실험용입니다."
@@ -81,12 +83,10 @@ def to_multihot(numbers: list[int]) -> np.ndarray:
 
 
 def build_dataset(vectors: np.ndarray, window: int):
-    """(samples, window, 45) -> (samples, 45) 시퀀스 데이터셋."""
-    x, y = [], []
-    for i in range(len(vectors) - window):
-        x.append(vectors[i : i + window])
-        y.append(vectors[i + window])
-    return np.asarray(x, dtype=np.float32), np.asarray(y, dtype=np.float32)
+    """이전 회차 한 개를 입력하고 다음 회차를 정답으로 사용한다."""
+    if window != 1:
+        raise ValueError("stateful LSTM requires window=1")
+    return vectors[:-1, np.newaxis, :], vectors[1:]
 
 
 # --- 통계 가중 추천 -----------------------------------------------------------
@@ -425,22 +425,55 @@ def update_history(new_prediction: dict, draws: list[dict]) -> None:
 
 
 def build_number_model(tf, window: int):
+    if window != 1:
+        raise ValueError("stateful LSTM requires window=1")
     model = tf.keras.Sequential([
-        tf.keras.layers.Input(shape=(window, NUM_RANGE)),
-        tf.keras.layers.LSTM(32),
+        tf.keras.layers.Input(batch_shape=(1, 1, NUM_RANGE)),
+        tf.keras.layers.LSTM(128, stateful=True),
         tf.keras.layers.Dense(NUM_RANGE, activation="sigmoid"),
     ])
-    model.compile(optimizer="adam", loss="binary_crossentropy",
-                  metrics=[tf.keras.metrics.AUC(name="auc", multi_label=True, num_labels=NUM_RANGE)])
+    model.compile(optimizer="adam", loss="binary_crossentropy")
     return model
 
 
+def fit_stateful(tf, model, x: np.ndarray, y: np.ndarray, epochs: int):
+    class ResetState(tf.keras.callbacks.Callback):
+        def on_epoch_begin(self, epoch, logs=None):
+            self.model.layers[0].reset_states()
+
+    return model.fit(x, y, epochs=epochs, batch_size=1, shuffle=False,
+                     callbacks=[ResetState()], verbose=2)
+
+
+def predict_stateful(model, inputs: np.ndarray) -> np.ndarray:
+    """고정 가중치로 처음부터 재생해 학습 상태나 이전 추론 상태를 제거한다."""
+    model.layers[0].reset_states()
+    return model.predict(inputs, batch_size=1, verbose=0)
+
+
+def ball_counts(scores: np.ndarray) -> np.ndarray:
+    """원문의 공 개수 int(score * 100 + 1). 점수 0인 번호에도 공 1개."""
+    values = np.asarray(scores, dtype=np.float64)
+    if (values.shape != (NUM_RANGE,) or not np.all(np.isfinite(values))
+            or np.any((values < 0) | (values > 1))):
+        raise ValueError("45 finite scores in [0, 1] required")
+    return (values * 100 + 1).astype(np.int64)
+
+
 def lstm_recommendations(
-    weights: np.ndarray, rng: np.random.Generator,
+    scores: np.ndarray, rng: np.random.Generator,
     count: int = 2, forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
 ) -> list[dict]:
-    return [{"method": "lstm-number-weighted-v2", "numbers": numbers}
-            for numbers in generate_weighted_sets(weights, rng, count, forbidden)]
+    # 중복 번호를 다시 뽑는 원문의 공 추출과 동일한 분포의 가중 비복원 추출.
+    return [{"method": LSTM_METHOD, "numbers": numbers}
+            for numbers in generate_weighted_sets(ball_counts(scores), rng, count, forbidden)]
+
+
+def number_metrics(tf, targets: np.ndarray, scores: np.ndarray) -> dict:
+    auc = tf.keras.metrics.AUC(multi_label=True, num_labels=NUM_RANGE)
+    auc.update_state(targets, scores)
+    return {"auc": float(auc.result().numpy()),
+            "loss": float(tf.reduce_mean(tf.keras.losses.binary_crossentropy(targets, scores)).numpy())}
 
 
 def comparison_matches(draws: list[dict], target_index: int, weights: np.ndarray) -> np.ndarray:
@@ -479,7 +512,8 @@ def selftest() -> int:
     x, y = build_dataset(vectors, DEFAULT_WINDOW)
     assert np.array_equal(x[0], vectors[:DEFAULT_WINDOW])
     assert np.array_equal(y[0], vectors[DEFAULT_WINDOW])
-    assert chronological_split(len(x)) == (200, 225)
+    assert chronological_split(len(x)) == (209, 234)
+    assert np.array_equal(x[-1, 0], vectors[-2]) and np.array_equal(y[-1], vectors[-1])
     for bad in (np.full(NUM_RANGE, np.nan), np.full(NUM_RANGE, np.inf), np.zeros(NUM_RANGE)):
         try:
             generate_weighted_sets(bad, np.random.default_rng(SEED), 2)
@@ -513,7 +547,7 @@ def selftest() -> int:
     alternate = generate_weighted_sets(weights, np.random.default_rng(SEED + 26100), 5, blocked)
     assert all(tuple(r) not in blocked for r in alternate)
     assert np.array_equal(evaluate_backtest_round(draws, 205), evaluate_backtest_round(draws[:206], 205))
-    weights = np.arange(1, NUM_RANGE + 1, dtype=float)
+    weights = np.linspace(0, 1, NUM_RANGE)
     assert np.array_equal(comparison_matches(draws, 205, weights),
                           comparison_matches(draws[:206], 205, weights))
     comparison = comparison_matches(draws, 205, np.ones(NUM_RANGE))
@@ -549,7 +583,59 @@ def selftest() -> int:
     assert upsert_entry(entries, prediction_to_entry(pred), replace=False) == entries
     entries = upsert_entry(entries, prediction_to_entry({**pred, "targetRound": 101}), replace=True)
     assert reconcile_history(entries, [draw])[-1]["result"] is None
+    scores = np.zeros(NUM_RANGE)
+    scores[:4] = [0, 0.2, 0.99, 1]
+    assert ball_counts(scores)[:4].tolist() == [1, 21, 100, 101]
+    assert np.all(ball_counts(np.zeros(NUM_RANGE)) == 1)
+    for bad in (np.full(NUM_RANGE, np.nan), np.full(NUM_RANGE, -0.1), np.full(NUM_RANGE, 1.1)):
+        try:
+            ball_counts(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid model scores accepted")
+    recs = lstm_recommendations(scores, np.random.default_rng(7))
+    expected = generate_weighted_sets(ball_counts(scores), np.random.default_rng(7), 2)
+    assert [rec["numbers"] for rec in recs] == expected
+    # 원문의 공 박스와 가중치 변환이 동일한지 확인한다.
+    box = np.repeat(np.arange(NUM_RANGE), ball_counts(scores))
+    assert np.array_equal(np.bincount(box, minlength=NUM_RANGE), ball_counts(scores))
     print("selftest ok")
+    return 0
+
+
+def model_selftest() -> int:
+    import tensorflow as tf
+
+    tf.keras.utils.set_random_seed(SEED)
+    tf.config.experimental.enable_op_determinism()
+    model = build_number_model(tf, 1)
+    assert model.input_shape == (1, 1, NUM_RANGE)
+    assert model.layers[0].stateful and model.layers[0].units == 128
+    vectors = np.stack([to_multihot([r, r + 1, r + 2, r + 3, r + 4, r + 5]) for r in range(1, 10)])
+    x, y = build_dataset(vectors, 1)
+    initial = model.get_weights()
+    fit_stateful(tf, model, x, y, 2)
+    assert any(not np.array_equal(a, b) for a, b in zip(initial, model.get_weights()))
+    scores = predict_stateful(model, vectors[:, np.newaxis, :])
+    assert scores.shape == (len(vectors), NUM_RANGE)
+    assert np.all(np.isfinite(scores)) and np.all((scores >= 0) & (scores <= 1))
+    prefix = predict_stateful(model, vectors[:-1, np.newaxis, :])
+    assert np.allclose(prefix, scores[:-1], atol=1e-6), "future input changed an earlier prediction"
+    assert np.allclose(predict_stateful(model, vectors[:, np.newaxis, :]), scores, atol=1e-6)
+    last_only = predict_stateful(model, vectors[-1:, np.newaxis, :])
+    assert not np.allclose(last_only[0], scores[-1]), "history state was not carried"
+    # 에포크 시작 시 오염된 상태를 초기화하는지 실제 학습으로 확인한다.
+    clone = build_number_model(tf, 1)
+    clone.set_weights(initial)
+    model.set_weights(initial)
+    model.optimizer = tf.keras.optimizers.Adam()
+    model.compile(optimizer=model.optimizer, loss="binary_crossentropy")
+    predict_stateful(model, vectors[:, np.newaxis, :])
+    fit_stateful(tf, model, x, y, 1)
+    fit_stateful(tf, clone, x, y, 1)
+    assert all(np.allclose(a, b, atol=1e-6) for a, b in zip(model.get_weights(), clone.get_weights()))
+    print("stateful model selftest ok")
     return 0
 
 
@@ -559,11 +645,14 @@ def main() -> int:
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--selftest", action="store_true", help="추천/이력 핵심 로직 검증 (TF 불필요)")
+    parser.add_argument("--model-selftest", action="store_true", help="TensorFlow 상태 전달/초기화 검증")
     args = parser.parse_args()
     if args.selftest:
         return selftest()
-    if min(args.window, args.epochs, args.batch_size) < 1:
-        parser.error("window, epochs and batch-size must be positive")
+    if args.model_selftest:
+        return model_selftest()
+    if args.window != 1 or args.batch_size != 1 or args.epochs < 1:
+        parser.error("stateful LSTM requires window=1, batch-size=1 and positive epochs")
 
     import tensorflow as tf
 
@@ -575,24 +664,19 @@ def main() -> int:
     x, y = build_dataset(vectors, args.window)
     train_end, test_start = chronological_split(len(x))
     model = build_number_model(tf, args.window)
-    early = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=8, restore_best_weights=True)
-    history = model.fit(
-        x[:train_end], y[:train_end],
-        validation_data=(x[train_end:test_start], y[train_end:test_start]),
-        epochs=args.epochs, batch_size=args.batch_size, callbacks=[early], verbose=2,
-    )
-    best_epoch = int(np.argmin(history.history["val_loss"])) + 1
-    validation = model.evaluate(x[train_end:test_start], y[train_end:test_start],
-                                verbose=0, return_dict=True)
-    # 검증으로 epoch를 고른 뒤, 한 번도 조정에 사용하지 않은 마지막 구간을 평가한다.
-    test_scores = model.predict(x[test_start:], verbose=0)
-    test_metrics = model.evaluate(x[test_start:], y[test_start:], verbose=0, return_dict=True)
+    # 원문의 반복 학습 실험: epoch 수를 사전에 고정하고 검증/시험 결과로 고르지 않는다.
+    fit_stateful(tf, model, x[:train_end], y[:train_end], args.epochs)
+    # 학습 때 누적된 상태를 버리고 고정된 최종 가중치로 과거부터 순서대로 재생.
+    evaluation_scores = predict_stateful(model, x)
+    validation = number_metrics(tf, y[train_end:test_start], evaluation_scores[train_end:test_start])
+    test_scores = evaluation_scores[test_start:]
+    test_metrics = number_metrics(tf, y[test_start:], test_scores)
     matches = np.asarray([
         comparison_matches(draws, args.window + test_start + offset, weights)
         for offset, weights in enumerate(test_scores)
     ])
     comparison = {
-        "evaluationMode": "chronological-holdout-v2",
+        "evaluationMode": "chronological-stateful-holdout-v3",
         "model": MODEL_NAME,
         "trainingThroughRound": draws[args.window + train_end - 1]["round"],
         "validationThroughRound": draws[args.window + test_start - 1]["round"],
@@ -607,15 +691,16 @@ def main() -> int:
         "uniformBrierScore": round(float(np.mean((PICK / NUM_RANGE - y[test_start:]) ** 2)), 6),
         "methods": [
             {"method": method, **match_summary(matches[:, index], matches[:, 0])}
-            for index, method in enumerate(("uniform", "weighted-statistical-v2", "lstm-number-weighted-v2"))
+            for index, method in enumerate(("uniform", "weighted-statistical-v2", LSTM_METHOD))
         ],
     }
-    # 최종 추천 모델은 검증에서 정한 epoch 수로 최신 회차까지 다시 학습한다.
+    # 최종 추천은 전체 회차로 동일한 epoch 수만큼 새로 학습한다.
     tf.keras.backend.clear_session()
     tf.keras.utils.set_random_seed(SEED)
     model = build_number_model(tf, args.window)
-    model.fit(x, y, epochs=best_epoch, batch_size=args.batch_size, verbose=2)
-    weights = model.predict(vectors[-args.window:][np.newaxis, ...], verbose=0)[0]
+    fit_stateful(tf, model, x, y, args.epochs)
+    # 최신 회차도 마지막 입력에 포함해야 다음 회차를 예측한다.
+    weights = predict_stateful(model, vectors[:, np.newaxis, :])[-1]
     historical = {tuple(d["numbers"]) for d in draws}
     lstm = lstm_recommendations(weights, np.random.default_rng(SEED + 3), forbidden=historical)
     selected = {tuple(rec["numbers"]) for rec in lstm}
@@ -633,7 +718,14 @@ def main() -> int:
         "targetRound": source_latest + 1,
         "trainedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "window": args.window,
-        "epochs": best_epoch,
+        "epochs": args.epochs,
+        "stateful": True,
+        "lstmUnits": 128,
+        "batchSize": 1,
+        "referenceUrl": REFERENCE_URL,
+        "sampling": "int(score * 100 + 1)",
+        "numberScores": [float(score) for score in weights],
+        "ballCounts": ball_counts(weights).tolist(),
         "trainSampleCount": len(x),
         "validationAuc": round(float(validation["auc"]), 4),
         "comparison": comparison,
@@ -648,7 +740,7 @@ def main() -> int:
     update_history(result, draws)
     OUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"saved {OUT_PATH.name}: source={source_latest} target={source_latest + 1} "
-          f"samples={len(x)} epochs={best_epoch} test_auc={comparison['testAuc']}")
+          f"samples={len(x)} epochs={args.epochs} test_auc={comparison['testAuc']}")
     return 0
 
 

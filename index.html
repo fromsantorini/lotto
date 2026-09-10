@@ -646,10 +646,15 @@
           targetRound: Number(data.targetRound || 0),
           trainedAt: data.trainedAt || null,
           window: Number(data.window || 0),
+          stateful: data.stateful === true,
+          epochs: finiteNumber(data.epochs),
+          numberScores: Array.isArray(data.numberScores) && data.numberScores.length === 45
+            && data.numberScores.every((score) => finiteNumber(score) !== null && score >= 0 && score <= 1)
+            ? data.numberScores : null,
           validationAuc: finiteNumber(data.validationAuc),
           candidateCount: Number.isInteger(Number(data.candidateCount)) ? Number(data.candidateCount) : 0,
           recommendations,
-          comparison: data.comparison?.evaluationMode === "chronological-holdout-v2"
+          comparison: ["chronological-holdout-v2", "chronological-stateful-holdout-v3"].includes(data.comparison?.evaluationMode)
             && Array.isArray(data.comparison.methods) ? data.comparison : null,
           backtest: data.backtest && typeof data.backtest === "object" ? {
             metric: String(data.backtest.metric || ""),
@@ -1477,6 +1482,7 @@
 
     function methodLabel(method) {
       if (method === "uniform") return "균등 무작위";
+      if (method === "lstm-stateful-ball-weighted-v3") return "LSTM 상태유지 · 원문 방식 v3";
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
       if (method === "weighted-statistical-v2") return "통계 빈도 가중 v2";
       if (method === "walk-forward-backtest-v2") return "시간순 백테스트 선택 v2";
@@ -1504,8 +1510,12 @@
       return `
         <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f0f6ff;${isStale ? "opacity:0.65;" : ""}">
           <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span><span class="stat-pill">2세트</span></h3>
-          <p class="muted">학습 기준 ${prediction.sourceLatestRound}회 → 예측 대상 ${prediction.targetRound}회 · 학습 시각 ${trained} · 입력 ${prediction.window}회 시퀀스</p>
-          <p class="muted">${prediction.comparison
+          <p class="muted">학습 기준 ${prediction.sourceLatestRound}회 → 예측 대상 ${prediction.targetRound}회 · 학습 시각 ${trained} · ${prediction.stateful
+            ? `회차 순서대로 상태 유지 · ${evaluationNumber(prediction.epochs, 0)}에포크 학습`
+            : `입력 ${prediction.window}회 시퀀스`}</p>
+          <p class="muted">${prediction.stateful
+            ? '128유닛 상태유지 LSTM이 이전 회차에서 다음 회차를 학습합니다. <a href="https://tykimos.github.io/2020/01/25/keras_lstm_lotto_v895/" target="_blank" rel="noopener noreferrer">참고 원문</a>처럼 점수 × 100 + 1의 정수 부분을 공 개수로 사용해 추출합니다.'
+            : prediction.comparison
             ? "번호별 출현 점수를 가중치로 사용합니다. 아래 비교표에서 미사용 구간의 성적을 확인하세요."
             : `검증 AUC ${evaluationNumber(prediction.validationAuc)} · 평가 후보 ${prediction.candidateCount.toLocaleString()}개 · 별도 평가 구간 없음`}</p>
           ${isStale ? `<p class="warning">⚠ 데이터는 ${data.latestRound}회까지 갱신됐지만 학습은 ${prediction.sourceLatestRound}회 기준입니다. 재학습 대기 중이라 참고용입니다.</p>` : ""}
@@ -1521,6 +1531,20 @@
               </article>
             `).join("")}
           </div>
+          ${prediction.stateful && prediction.numberScores ? `
+            <details style="margin-top:12px;">
+              <summary>45개 번호의 모델 점수와 추출 가중치</summary>
+              <p class="muted">점수순으로 표시합니다. 공이 많을수록 추출되기 쉽지만 선택이 확정되지는 않습니다. 공 개수는 번호별 출현 확률이 아닙니다.</p>
+              <div class="table-wrap" tabindex="0" role="region" aria-label="번호별 모델 점수">
+                <table>
+                  <thead><tr><th scope="col">번호</th><th scope="col">모델 점수</th><th scope="col">공 개수</th></tr></thead>
+                  <tbody>${prediction.numberScores.map((score, index) => ({ number: index + 1, score }))
+                    .sort((a, b) => b.score - a.score || a.number - b.number)
+                    .map(({ number, score }) => `<tr><th scope="row">${number}</th><td>${score.toFixed(6)}</td><td>${Math.floor(score * 100 + 1)}</td></tr>`).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </details>` : ""}
           <p class="warning" style="margin-top:12px;">${prediction.warning || "로또는 독립시행이므로 실험용이며 당첨 확률 상승을 의미하지 않습니다."}</p>
         </div>`;
     }
@@ -1579,7 +1603,7 @@
       const comparison = prediction?.comparison;
       if (!comparison) return '<p class="muted">동일 조건 비교는 개선 버전 재학습 후 표시됩니다.</p>';
       const methods = comparison.methods.filter((row) =>
-        ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2"].includes(row?.method));
+        ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2", "lstm-stateful-ball-weighted-v3"].includes(row?.method));
       return `
         <h3 style="margin:20px 0 8px;">동일 조건 추천 비교</h3>
         <p class="muted">학습·조정에 사용하지 않은 ${evaluationNumber(comparison.testStartRound, 0)}~${evaluationNumber(comparison.testEndRound, 0)}회,
@@ -1600,7 +1624,7 @@
             </tbody>
           </table>
         </div>
-        <p class="muted">평가 중 LSTM 가중치는 고정하고 매회 입력과 통계는 직전 회차까지 갱신했습니다. 다음 회차 추천은 전체 데이터로 재학습합니다.
+        <p class="muted">평가 중 LSTM 가중치는 고정하고 매회 입력과 통계는 직전 회차까지 갱신했습니다. 상태유지 모델은 회차 사이의 내부 상태도 이어갑니다. 다음 회차 추천은 전체 데이터로 재학습합니다.
           신뢰구간은 회차 단위 재표집 근사치이며 여러 방식의 동시 비교를 보정한 확증 결과가 아닙니다.</p>
         <details><summary>번호별 점수 진단</summary>
           <p class="muted">평가 AUC ${evaluationNumber(comparison.testAuc)} · Brier 오차 ${evaluationNumber(comparison.brierScore, 6)} · 균등 기준 ${evaluationNumber(comparison.uniformBrierScore, 6)}.

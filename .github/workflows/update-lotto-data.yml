@@ -51,6 +51,7 @@ jobs:
         if: steps.update.outputs.changed == 'true'
         run: |
           python tools/train-lstm-lotto.py --selftest
+          python tools/train-lstm-lotto.py --model-selftest
           python tools/train-lstm-lotto.py
           node tools/test-backtest-render.mjs
 

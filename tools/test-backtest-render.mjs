@@ -86,4 +86,29 @@ const history = JSON.parse(readFileSync(new URL("../lstm-prediction-history.json
 api.renderLstmScoreboard(history.entries);
 assert.doesNotMatch(panels.get("#lstmScorePanel").innerHTML, /NaN|undefined/);
 assert.match(api.buildRecommendationReasonSummary({ method: "weighted-statistical-v2" }), /번호당 1/);
+
+// 기존 JSON과 상태유지 모델 JSON 모두 표시하며 누락/오염 점수는 숨긴다.
+data = structuredClone(current);
+data.stateful = true;
+data.epochs = 100;
+data.numberScores = Array(45).fill(0.2);
+data.numberScores[0] = 0.99;
+data.recommendations[0].method = "lstm-stateful-ball-weighted-v3";
+data.comparison = {
+  evaluationMode: "chronological-stateful-holdout-v3", testedRounds: 123,
+  methods: [{ method: "lstm-stateful-ball-weighted-v3", meanMatches: 0.8 }],
+};
+prediction = await api.loadLstmPrediction();
+api.setPrediction(prediction);
+api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{}] });
+const statefulPanel = panels.get("#recommendPanel").innerHTML;
+assert.match(statefulPanel, /128유닛 상태유지 LSTM/);
+assert.match(statefulPanel, /100에포크 학습/);
+assert.match(statefulPanel, /원문 방식 v3/);
+assert.match(statefulPanel, /<td>0\.990000<\/td><td>100<\/td>/);
+assert.match(statefulPanel, /<td>0\.200000<\/td><td>21<\/td>/);
+assert.match(api.renderMethodComparison(prediction), /원문 방식 v3/);
+assert.doesNotMatch(statefulPanel, /NaN|undefined/);
+data.numberScores[1] = null;
+assert.equal((await api.loadLstmPrediction()).numberScores, null);
 console.log("recommendation render checks passed");

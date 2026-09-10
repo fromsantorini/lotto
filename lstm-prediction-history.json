@@ -4,29 +4,29 @@
     {
       "targetRound": 1241,
       "sourceLatestRound": 1240,
-      "trainedAt": "2026-09-09T10:12:48Z",
-      "model": "keras-lstm-number-scorer-v2",
+      "trainedAt": "2026-09-10T09:48:36Z",
+      "model": "keras-stateful-lstm-tykimos-v3",
       "recommendations": [
         {
-          "method": "lstm-number-weighted-v2",
+          "method": "lstm-stateful-ball-weighted-v3",
           "numbers": [
-            19,
+            18,
+            20,
+            24,
+            26,
             27,
-            29,
-            31,
-            37,
-            38
+            30
           ]
         },
         {
-          "method": "lstm-number-weighted-v2",
+          "method": "lstm-stateful-ball-weighted-v3",
           "numbers": [
+            18,
+            20,
             24,
-            25,
-            27,
-            35,
-            36,
-            37
+            26,
+            30,
+            44
           ]
         },
         {
