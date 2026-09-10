@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """LSTM 로또 실험 학습/예측 스크립트.
 
-lotto-data.json 을 읽어 직전 W회차 시퀀스와 후보 조합의 적합도를 학습하고,
-유효 후보를 가중 선택해 lstm-prediction.json 으로 저장한다.
+lotto-data.json 을 읽어 직전 W회차에서 번호별 출현 점수를 학습하고,
+중복 없는 추천과 시간순 평가를 lstm-prediction.json 으로 저장한다.
 
-주의: 로또는 독립시행(IID)이라 학습 가능한 신호가 없다. 모델 출력은 사실상 과거
-빈도 통계로 수렴하며, 기존 통계 추천과 통계적으로 구분되지 않는다. 이 결과는
-"딥러닝이 무엇을 출력하는가"를 보여주는 실험/시연용이며 당첨 확률 상승을 의미하지
-않는다.
+주의: 공정한 독립 추첨에서는 과거 번호만으로 다음 당첨번호의 예측 우위를
+기대할 수 없다. 모델과 통계 추천은 실험용이며 당첨 확률 상승을 의미하지 않는다.
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 
@@ -33,14 +32,12 @@ OUT_PATH = ROOT / "lstm-prediction.json"
 HISTORY_PATH = ROOT / "lstm-prediction-history.json"
 HISTORY_LIMIT = 200  # 이력 최대 보관 회차 수
 
-NEGATIVES_PER_POSITIVE = 5
-INFERENCE_CANDIDATES = 50_000
 VALIDATION_FRACTION = 0.1
 MAX_CANDIDATE_ATTEMPT_FACTOR = 100
 
-MODEL_NAME = "keras-lstm-combination-scorer-v1"
+MODEL_NAME = "keras-lstm-number-scorer-v2"
 WARNING = (
-    "모델 점수는 후보 간 상대 비교값이며 당첨 확률이 아닙니다. "
+    "번호별 모델 점수는 추천 가중치이며 조합의 당첨 확률이 아닙니다. "
     "로또는 독립시행이므로 이 결과는 실험용입니다."
 )
 
@@ -98,11 +95,11 @@ def build_dataset(vectors: np.ndarray, window: int):
 
 STAT_WINDOW = 100   # 강세/소외 판정에 쓰는 최근 회차 수
 STAT_SETS = 3
-WINDOW_RECENT = 4   # 보정 창: 최근 4회 + 이번 추천 = 5회
-STAT_POOL = 10_000  # 통계 가중 선택용 무작위 후보 풀 크기
-NUMBER_ZONES = [(1, 10), (11, 20), (21, 30), (31, 40), (41, 45)]
 BACKTEST_SETS = 5
 BACKTEST_MIN_HISTORY = 200
+SELECTION_WARMUP = 50
+EVALUATION_SEEDS = (42, 137, 2026)
+COMPARISON_SETS = 2
 BACKTEST_WINDOWS = (10, 25, 50, 100, 200)
 BACKTEST_HALF_LIVES = (10, 25, 50, 100, 200)
 BACKTEST_METHODS = (
@@ -144,170 +141,35 @@ def matches_legacy_balance(nums: list[int]) -> bool:
     )
 
 
-def multihot_to_numbers(vector: np.ndarray) -> list[int]:
-    return [int(i) + 1 for i in np.flatnonzero(vector)]
-
-
-def generate_candidates(
-    rng: np.random.Generator,
-    count: int,
-    forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
-) -> list[list[int]]:
-    candidates: set[tuple[int, ...]] = set()
-    for _ in range(count * MAX_CANDIDATE_ATTEMPT_FACTOR):
-        numbers = tuple(
-            sorted(int(i) + 1 for i in rng.choice(NUM_RANGE, PICK, replace=False))
-        )
-        if numbers not in forbidden:
-            candidates.add(numbers)
-            if len(candidates) == count:
-                return [list(candidate) for candidate in sorted(candidates)]
-    raise RuntimeError(f"candidate shortage: {len(candidates)} < {count}")
-
-
-def expand_scorer_examples(
-    sequences: np.ndarray,
-    positives: np.ndarray,
-    rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    sequence_examples: list[np.ndarray] = []
-    candidate_examples: list[np.ndarray] = []
-    labels: list[float] = []
-
-    for sequence, positive in zip(sequences, positives):
-        positive_numbers = multihot_to_numbers(positive)
-        negatives = generate_candidates(
-            rng,
-            NEGATIVES_PER_POSITIVE,
-            {tuple(positive_numbers)},
-        )
-        for numbers, label in [
-            (positive_numbers, 1.0),
-            *((numbers, 0.0) for numbers in negatives),
-        ]:
-            sequence_examples.append(sequence)
-            candidate_examples.append(to_multihot(numbers))
-            labels.append(label)
-
-    return (
-        np.asarray(sequence_examples, dtype=np.float32),
-        np.asarray(candidate_examples, dtype=np.float32),
-        np.asarray(labels, dtype=np.float32),
-    )
-
-
-def overall_profile(draws: list[dict]) -> dict:
-    """전체 누적 통계를 번호 칸 비율로 요약 (끝수·홀짝·저고·구간·연번율)."""
-    nums = [n for d in draws for n in d["numbers"]]
-    total = len(nums)
-    return {
-        "digitShare": [sum(1 for n in nums if n % 10 == d) / total for d in range(10)],
-        "oddShare": sum(1 for n in nums if n % 2) / total,
-        "lowShare": sum(1 for n in nums if n <= 22) / total,
-        "zoneShare": [sum(1 for n in nums if lo <= n <= hi) / total for lo, hi in NUMBER_ZONES],
-        "runRate": sum(bool(consecutive_runs(d["numbers"])) for d in draws) / len(draws),
-    }
-
-
-def window_deviation(profile: dict, window_nums: list[int]) -> float:
-    """(최근 4회 + 후보) 창의 끝수·홀짝·저고·구간 비율과 전체 누적 비율의 편차 합."""
-    total = len(window_nums)
-    dev = sum(
-        abs(sum(1 for n in window_nums if n % 10 == d) / total - profile["digitShare"][d])
-        for d in range(10)
-    )
-    dev += abs(sum(1 for n in window_nums if n % 2) / total - profile["oddShare"])
-    dev += abs(sum(1 for n in window_nums if n <= 22) / total - profile["lowShare"])
-    dev += sum(
-        abs(sum(1 for n in window_nums if lo <= n <= hi) / total - profile["zoneShare"][z])
-        for z, (lo, hi) in enumerate(NUMBER_ZONES)
-    )
-    return dev
-
-
-def selection_weights(scores: np.ndarray, temperature: float = 1.0) -> np.ndarray:
-    """유한 점수를 순서 보존·양수 확률로 변환한다."""
-    values = np.asarray(scores, dtype=np.float64).reshape(-1)
-    if not len(values) or not np.all(np.isfinite(values)) or temperature <= 0:
-        raise ValueError("finite scores and positive temperature required")
-    scaled = (values - np.max(values)) / temperature
-    scaled = np.maximum(scaled, np.log(np.finfo(np.float64).tiny))
-    weights = np.exp(scaled)
-    return weights / weights.sum()
-
-
 def stat_recommendations(
     draws: list[dict],
     rng: np.random.Generator,
     count: int = STAT_SETS,
     forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
 ) -> list[dict]:
-    """최근 통계 점수를 선택 가중치로만 쓰는 추천 count세트 (draws는 오름차순)."""
-    recent = draws[-STAT_WINDOW:]
-    counts = {n: 0 for n in range(1, NUM_RANGE + 1)}
-    for d in recent:
-        for n in d["numbers"]:
-            counts[n] += 1
-    hot = sorted(counts, key=lambda n: (-counts[n], n))[:12]
-    cold = sorted(counts, key=lambda n: (counts[n], n))[:12]
+    """최근 100회 빈도에 번호당 1을 더한 가중 추출. 부족한 패턴은 보정하지 않는다."""
+    weights = backtest_method_weights(draws, "frequency-window", STAT_WINDOW)
+    hot = set(np.argsort(-weights, kind="stable")[:12] + 1)
+    cold = set(np.argsort(weights, kind="stable")[:12] + 1)
     historical = {tuple(d["numbers"]) for d in draws} | set(forbidden)
     carry_pool = set(draws[-1]["numbers"])
-    profile = overall_profile(draws)
-    recent4 = [n for d in draws[-WINDOW_RECENT:] for n in d["numbers"]]
-    # 연번: 5회 창 기대치 대비 최근 4회가 부족하면 이번 세트에 2연번 포함
-    runs4 = sum(1 for d in draws[-WINDOW_RECENT:] if consecutive_runs(d["numbers"]))
-    want_run = profile["runRate"] * (WINDOW_RECENT + 1) - runs4 >= 0.5
-    # 끝수 보정 표시용: 5회 창 목표 대비 최근 4회에 1개 이상 부족한 끝수
-    slots = len(recent4) + PICK
-    deficit_digits = {
-        d for d in range(10)
-        if profile["digitShare"][d] * slots - sum(1 for n in recent4 if n % 10 == d) >= 1
-    }
-
-    candidates = generate_candidates(rng, max(STAT_POOL, count), historical)
-    average_sum = float(np.mean([sum(d["numbers"]) for d in draws]))
-    sum_std = max(float(np.std([sum(d["numbers"]) for d in draws])), 1.0)
-    scores = []
-    for cand in candidates:
-        hot_count = sum(n in hot for n in cand)
-        cold_count = sum(n in cold for n in cand)
-        carry_count = sum(n in carry_pool for n in cand)
-        preference_penalty = (
-            abs(hot_count - 2)
-            + abs(cold_count - 2)
-            + abs(carry_count - 1)
-            + int(bool(consecutive_runs(cand)) != want_run)
-        )
-        scores.append(
-            -window_deviation(profile, recent4 + cand)
-            - abs(sum(cand) - average_sum) / sum_std
-            - 0.25 * preference_penalty
-        )
-    selected_indices = rng.choice(
-        len(candidates), size=count, replace=False, p=selection_weights(np.asarray(scores))
-    )
-    recs: list[dict] = []
-    for index in selected_indices:
-        cand = candidates[int(index)]
-        odd = sum(1 for n in cand if n % 2)
-        low = sum(1 for n in cand if n <= 22)
-        recs.append(
-            {
-                "method": "weighted-statistical",
-                "numbers": cand,
-                "reason": {
-                    "oddEven": f"{odd}:{PICK - odd}",
-                    "lowHigh": f"{low}:{PICK - low}",
-                    "sum": sum(cand),
-                    "frequentNumbers": [n for n in cand if n in hot],
-                    "coldNumbers": [n for n in cand if n in cold],
-                    "carryOverNumbers": [n for n in cand if n in carry_pool],
-                    "endingNumbers": [n for n in cand if n % 10 in deficit_digits],
-                    "consecutiveRuns": consecutive_runs(cand),
-                },
-            }
-        )
-    return recs
+    return [
+        {
+            "method": "weighted-statistical-v2",
+            "numbers": cand,
+            "reason": {
+                "oddEven": f"{sum(n % 2 for n in cand)}:{sum(n % 2 == 0 for n in cand)}",
+                "lowHigh": f"{sum(n <= 22 for n in cand)}:{sum(n > 22 for n in cand)}",
+                "sum": sum(cand),
+                "frequentNumbers": [n for n in cand if n in hot],
+                "coldNumbers": [n for n in cand if n in cold],
+                "carryOverNumbers": [n for n in cand if n in carry_pool],
+                "endingNumbers": [],
+                "consecutiveRuns": consecutive_runs(cand),
+            },
+        }
+        for cand in generate_weighted_sets(weights, rng, count, historical)
+    ]
 
 
 def backtest_method_weights(
@@ -343,8 +205,10 @@ def generate_weighted_sets(
     forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
 ) -> list[list[int]]:
     probabilities = np.asarray(weights, dtype=np.float64)
-    if probabilities.shape != (NUM_RANGE,) or np.any(probabilities <= 0):
+    if (probabilities.shape != (NUM_RANGE,) or not np.all(np.isfinite(probabilities))
+            or np.any(probabilities <= 0) or count < 1):
         raise ValueError("45 positive number weights required")
+    probabilities = probabilities / probabilities.max()
     probabilities = probabilities / probabilities.sum()
     selected: set[tuple[int, ...]] = set()
     for _ in range(count * MAX_CANDIDATE_ATTEMPT_FACTOR):
@@ -363,63 +227,105 @@ def generate_weighted_sets(
     raise RuntimeError(f"weighted recommendation shortage: {len(selected)} < {count}")
 
 
-def choose_backtest_method(means: np.ndarray) -> int:
-    values = np.asarray(means, dtype=np.float64)
-    winner = int(np.argmax(values))
-    return winner if values[winner] > values[0] and values[winner] > 0.8 else 0
+def choose_backtest_method(round_means: np.ndarray) -> int:
+    """지난 회차의 paired 차이에 보수적 다중비교 기준을 적용한다."""
+    values = np.asarray(round_means, dtype=np.float64)
+    if len(values) < SELECTION_WARMUP:
+        return 0
+    differences = values[:, 1:] - values[:, :1]
+    # ponytail: 정규근사 선택 기준; 회차 의존성을 분석할 때 block bootstrap으로 교체.
+    critical = NormalDist().inv_cdf(1 - 0.05 / differences.shape[1])
+    lower = differences.mean(axis=0) - critical * differences.std(axis=0, ddof=1) / np.sqrt(len(values))
+    eligible = (lower > 0) & (values[:, 1:].mean(axis=0) > PICK * PICK / NUM_RANGE)
+    if not np.any(eligible):
+        return 0
+    return 1 + int(np.argmax(np.where(eligible, values[:, 1:].mean(axis=0), -np.inf)))
 
 
 def evaluate_backtest_round(draws: list[dict], target_index: int) -> np.ndarray:
     history = draws[:target_index]
     winning = set(draws[target_index]["numbers"])
     forbidden = {tuple(draw["numbers"]) for draw in history}
-    scores = np.zeros(len(BACKTEST_METHODS), dtype=np.float64)
+    matches = np.zeros((len(BACKTEST_METHODS), len(EVALUATION_SEEDS), BACKTEST_SETS))
     for method_index, (kind, parameter) in enumerate(BACKTEST_METHODS):
-        sets = generate_weighted_sets(
-            backtest_method_weights(history, kind, parameter),
-            np.random.default_rng(
-                SEED + draws[target_index]["round"] * 100 + method_index
-            ),
-            BACKTEST_SETS,
-            forbidden,
-        )
-        scores[method_index] = sum(
-            len(winning & set(numbers)) for numbers in sets
-        )
-    return scores
+        weights = backtest_method_weights(history, kind, parameter)
+        for seed_index, seed in enumerate(EVALUATION_SEEDS):
+            sets = generate_weighted_sets(
+                weights,
+                np.random.default_rng(seed + draws[target_index]["round"] * 100),
+                BACKTEST_SETS,
+                forbidden,
+            )
+            matches[method_index, seed_index] = [len(winning & set(numbers)) for numbers in sets]
+    return matches
 
 
-def build_backtest_recommendations(draws: list[dict]) -> tuple[dict, list[dict]]:
-    totals = np.zeros(len(BACKTEST_METHODS), dtype=np.float64)
-    tested_rounds = max(0, len(draws) - BACKTEST_MIN_HISTORY)
-    for target_index in range(BACKTEST_MIN_HISTORY, len(draws)):
-        totals += evaluate_backtest_round(draws, target_index)
+def match_summary(matches: np.ndarray, baseline: np.ndarray) -> dict:
+    """같은 회차의 세트/시드를 묶어 재표집하며 독립 표본으로 과대 계산하지 않는다."""
+    count = len(matches)
+    if not count:
+        return {"meanMatches": None, "threePlusRate": None,
+                "differenceVsRandom": None, "differenceCI95": None, "evidence": "insufficient-data"}
+    differences = (matches - baseline).reshape(count, -1).mean(axis=1)
+    interval = None
+    if count >= 2:
+        # ponytail: 회차 단위 IID bootstrap; 회차 의존성을 분석할 때 block bootstrap으로 교체.
+        indices = np.random.default_rng(SEED).integers(count, size=(2000, count))
+        interval = [round(float(v), 4) for v in np.quantile(differences[indices].mean(axis=1), [0.025, 0.975])]
+    return {
+        "meanMatches": round(float(np.mean(matches)), 4),
+        "threePlusRate": round(float(np.mean(matches >= 3)), 4),
+        "differenceVsRandom": round(float(np.mean(differences)), 4),
+        "differenceCI95": interval,
+        "evidence": "above-random" if count >= SELECTION_WARMUP and interval[0] > 0 else "not-established",
+    }
 
-    means = totals / (tested_rounds * BACKTEST_SETS) if tested_rounds else totals
-    selected_index = choose_backtest_method(means) if tested_rounds else 0
-    selected_kind, selected_parameter = BACKTEST_METHODS[selected_index]
-    historical = {tuple(draw["numbers"]) for draw in draws}
-    numbers = generate_weighted_sets(
-        backtest_method_weights(draws, selected_kind, selected_parameter),
-        np.random.default_rng(
-            SEED + (draws[-1]["round"] + 1) * 100 + selected_index
-        ),
-        BACKTEST_SETS,
-        historical,
-    )
-    summary = {
+
+def summarize_backtest(scores: np.ndarray) -> tuple[dict, int]:
+    round_means = scores.mean(axis=(2, 3))
+    chosen, baseline = [], []
+    for index in range(SELECTION_WARMUP, len(scores)):
+        # 반드시 이번 회차의 정답을 보기 전에 방식을 선택한다.
+        selected = choose_backtest_method(round_means[:index])
+        chosen.append(scores[index, selected])
+        baseline.append(scores[index, 0])
+    selected = choose_backtest_method(round_means)
+    summary = match_summary(np.asarray(chosen), np.asarray(baseline))
+    summary.update({
         "metric": "mean-matches-per-set",
-        "testedRounds": tested_rounds,
+        "evaluationMode": "prequential-selection-v2",
+        "testedRounds": len(chosen),
+        "selectionRounds": len(scores),
+        "warmupRounds": SELECTION_WARMUP,
+        "seedCount": len(EVALUATION_SEEDS),
+        "setsPerMethod": BACKTEST_SETS,
+        "randomBaseline": round(float(np.mean(baseline)), 4) if baseline else None,
+    })
+    return summary, selected
+
+
+def build_backtest_recommendations(
+    draws: list[dict],
+    forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
+) -> tuple[dict, list[dict]]:
+    scores = np.asarray([
+        evaluate_backtest_round(draws, index)
+        for index in range(BACKTEST_MIN_HISTORY, len(draws))
+    ]).reshape(-1, len(BACKTEST_METHODS), len(EVALUATION_SEEDS), BACKTEST_SETS)
+    summary, selected_index = summarize_backtest(scores)
+    selected_kind, selected_parameter = BACKTEST_METHODS[selected_index]
+    summary.update({
         "selectedMethod": selected_kind,
         "selectedWindow": selected_parameter if selected_kind == "frequency-window" else None,
         "selectedHalfLife": selected_parameter if selected_kind == "frequency-decay" else None,
-        "meanMatches": round(float(means[selected_index]), 4) if tested_rounds else None,
-        "randomBaseline": round(float(means[0]), 4) if tested_rounds else None,
-    }
-    return summary, [
-        {"method": "walk-forward-backtest", "numbers": recommendation}
-        for recommendation in numbers
-    ]
+    })
+    historical = {tuple(draw["numbers"]) for draw in draws} | set(forbidden)
+    numbers = generate_weighted_sets(
+        backtest_method_weights(draws, selected_kind, selected_parameter),
+        np.random.default_rng(SEED + (draws[-1]["round"] + 1) * 100),
+        BACKTEST_SETS, historical,
+    )
+    return summary, [{"method": "walk-forward-backtest-v2", "numbers": rec} for rec in numbers]
 
 
 # --- 예측 이력(성적표) 관리 ---------------------------------------------------
@@ -449,6 +355,7 @@ def prediction_to_entry(pred: dict) -> dict | None:
         "targetRound": pred["targetRound"],
         "sourceLatestRound": pred.get("sourceLatestRound"),
         "trainedAt": pred.get("trainedAt"),
+        "model": pred.get("model"),
         "recommendations": recs,
         "result": None,
     }
@@ -517,200 +424,131 @@ def update_history(new_prediction: dict, draws: list[dict]) -> None:
     save_history(HISTORY_PATH, entries)
 
 
-def build_combination_scorer(tf, window: int):
-    sequence_input = tf.keras.layers.Input(
-        shape=(window, NUM_RANGE), name="sequence"
-    )
-    candidate_input = tf.keras.layers.Input(shape=(NUM_RANGE,), name="candidate")
-    context = tf.keras.layers.LSTM(128)(sequence_input)
-    merged = tf.keras.layers.Concatenate()([context, candidate_input])
-    hidden = tf.keras.layers.Dense(64, activation="relu")(merged)
-    score = tf.keras.layers.Dense(1, activation="sigmoid", name="score")(hidden)
-    model = tf.keras.Model([sequence_input, candidate_input], score)
-    model.compile(
-        optimizer="adam",
-        loss="binary_crossentropy",
-        metrics=[tf.keras.metrics.AUC(name="auc")],
-    )
+def build_number_model(tf, window: int):
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(window, NUM_RANGE)),
+        tf.keras.layers.LSTM(32),
+        tf.keras.layers.Dense(NUM_RANGE, activation="sigmoid"),
+    ])
+    model.compile(optimizer="adam", loss="binary_crossentropy",
+                  metrics=[tf.keras.metrics.AUC(name="auc", multi_label=True, num_labels=NUM_RANGE)])
     return model
 
 
-def select_scored_recommendations(
-    candidates: list[list[int]], scores: np.ndarray, rng: np.random.Generator
+def lstm_recommendations(
+    weights: np.ndarray, rng: np.random.Generator,
+    count: int = 2, forbidden: set[tuple[int, ...]] | frozenset[tuple[int, ...]] = frozenset(),
 ) -> list[dict]:
-    flat_scores = np.asarray(scores).reshape(-1)
-    indices = rng.choice(
-        len(candidates), size=2, replace=False, p=selection_weights(flat_scores, temperature=0.1)
-    )
-    return [
-        {
-            "method": "lstm-weighted-selection",
-            "numbers": candidates[int(index)],
-            "modelScore": round(float(flat_scores[int(index)]), 6),
-        }
-        for index in indices
-    ]
+    return [{"method": "lstm-number-weighted-v2", "numbers": numbers}
+            for numbers in generate_weighted_sets(weights, rng, count, forbidden)]
+
+
+def comparison_matches(draws: list[dict], target_index: int, weights: np.ndarray) -> np.ndarray:
+    history = draws[:target_index]
+    forbidden = {tuple(draw["numbers"]) for draw in history}
+    winning = set(draws[target_index]["numbers"])
+    result = np.zeros((3, len(EVALUATION_SEEDS), COMPARISON_SETS))
+    for seed_index, seed in enumerate(EVALUATION_SEEDS):
+        seed = seed + draws[target_index]["round"] * 100
+        groups = [
+            generate_weighted_sets(np.ones(NUM_RANGE), np.random.default_rng(seed), COMPARISON_SETS, forbidden),
+            [r["numbers"] for r in stat_recommendations(history, np.random.default_rng(seed), COMPARISON_SETS)],
+            [r["numbers"] for r in lstm_recommendations(weights, np.random.default_rng(seed), COMPARISON_SETS, forbidden)],
+        ]
+        for method, group in enumerate(groups):
+            result[method, seed_index] = [len(winning & set(numbers)) for numbers in group]
+    return result
+
+
+def chronological_split(sample_count: int) -> tuple[int, int]:
+    block = max(1, int(sample_count * VALIDATION_FRACTION))
+    train_end, test_start = sample_count - 2 * block, sample_count - block
+    if train_end < MIN_TRAIN_SAMPLES:
+        raise ValueError("학습/검증/평가 구간을 만들기에 회차가 부족합니다")
+    return train_end, test_start
 
 
 def selftest() -> int:
-    """TF 없이 추천/이력 핵심 로직을 검증하는 자체 점검."""
+    """TF 없이 시간순 평가, 추천 중복, 이력 보존을 검증한다."""
     draws = [
-        {"round": 100, "numbers": [1, 2, 3, 4, 5, 6], "date": "2026-01-03", "bonus": 7},
+        {"round": r, "numbers": sorted(int(n) + 1 for n in
+         np.random.default_rng(SEED + r).choice(NUM_RANGE, PICK, replace=False))}
+        for r in range(1, 261)
     ]
-    pred_99 = {
-        "targetRound": 100,
-        "sourceLatestRound": 99,
-        "trainedAt": "t0",
-        "recommendations": [{"method": "m", "numbers": [1, 2, 3, 10, 11, 7]}],
-    }
-    entries = upsert_entry([], prediction_to_entry(pred_99), replace=True)
-    assert len(entries) == 1
-
-    # 같은 회차 재학습 시 교체, replace=False 면 유지
-    entries = upsert_entry(entries, prediction_to_entry({**pred_99, "trainedAt": "t1"}), replace=True)
-    assert len(entries) == 1 and entries[0]["trainedAt"] == "t1"
-    entries = upsert_entry(entries, prediction_to_entry({**pred_99, "trainedAt": "t2"}), replace=False)
-    assert entries[0]["trainedAt"] == "t1"
-
-    entries = reconcile_history(entries, draws)
+    vectors = np.stack([to_multihot(d["numbers"]) for d in draws])
+    x, y = build_dataset(vectors, DEFAULT_WINDOW)
+    assert np.array_equal(x[0], vectors[:DEFAULT_WINDOW])
+    assert np.array_equal(y[0], vectors[DEFAULT_WINDOW])
+    assert chronological_split(len(x)) == (200, 225)
+    for bad in (np.full(NUM_RANGE, np.nan), np.full(NUM_RANGE, np.inf), np.zeros(NUM_RANGE)):
+        try:
+            generate_weighted_sets(bad, np.random.default_rng(SEED), 2)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid weights accepted")
+    assert len(generate_weighted_sets(np.full(NUM_RANGE, 1e308), np.random.default_rng(SEED), 2)) == 2
+    forbidden = {tuple(d["numbers"]) for d in draws}
+    lstm = lstm_recommendations(np.ones(NUM_RANGE), np.random.default_rng(SEED), forbidden=forbidden)
+    forbidden.update(tuple(r["numbers"]) for r in lstm)
+    stats = stat_recommendations(draws, np.random.default_rng(SEED), forbidden=forbidden)
+    assert stats == stat_recommendations(draws, np.random.default_rng(SEED), forbidden=forbidden)
+    assert all(r["reason"]["endingNumbers"] == [] for r in stats)
+    samples = generate_weighted_sets(np.ones(NUM_RANGE), np.random.default_rng(SEED), 30)
+    assert any(not matches_legacy_balance(c) for c in samples)
+    forbidden.update(tuple(r["numbers"]) for r in stats)
+    summary, backtest = build_backtest_recommendations(draws, forbidden)
+    bundle = lstm + stats + backtest
+    assert len(bundle) == len({tuple(r["numbers"]) for r in bundle}) == 10
+    for rec in bundle:
+        assert len(rec["numbers"]) == len(set(rec["numbers"])) == PICK
+        assert all(1 <= n <= NUM_RANGE for n in rec["numbers"])
+        assert tuple(rec["numbers"]) not in {tuple(d["numbers"]) for d in draws}
+    assert summary["testedRounds"] == 10 and summary["selectionRounds"] == 60
+    assert all(tuple(r["numbers"]) not in forbidden for r in backtest)
+    # 이미 뽑힌 백테스트 세트와 충돌해도 제외한다.
+    weights = backtest_method_weights(draws, summary["selectedMethod"],
+                                     summary["selectedWindow"] or summary["selectedHalfLife"])
+    blocked = forbidden | {tuple(r["numbers"]) for r in backtest}
+    alternate = generate_weighted_sets(weights, np.random.default_rng(SEED + 26100), 5, blocked)
+    assert all(tuple(r) not in blocked for r in alternate)
+    assert np.array_equal(evaluate_backtest_round(draws, 205), evaluate_backtest_round(draws[:206], 205))
+    weights = np.arange(1, NUM_RANGE + 1, dtype=float)
+    assert np.array_equal(comparison_matches(draws, 205, weights),
+                          comparison_matches(draws[:206], 205, weights))
+    comparison = comparison_matches(draws, 205, np.ones(NUM_RANGE))
+    assert np.array_equal(comparison[0], comparison[2])
+    assert choose_backtest_method(np.tile([0.8, 1.2, 0.7], (49, 1))) == 0
+    assert choose_backtest_method(np.tile([0.8, 1.2, 0.7], (50, 1))) == 1
+    assert choose_backtest_method(np.tile([0.8, 0.8, 0.8], (50, 1))) == 0
+    # 이번 회차에서만 6개를 맞힌 방식은 이번 회차의 선택에 소급 반영할 수 없다.
+    scores = np.ones((51, len(BACKTEST_METHODS), len(EVALUATION_SEEDS), BACKTEST_SETS))
+    scores[-1, 1] = 6
+    audit, _ = summarize_backtest(scores)
+    assert audit["meanMatches"] == audit["randomBaseline"] == 1.0
+    assert audit["testedRounds"] == 1 and audit["differenceCI95"] is None
+    scores[:50, 1] = 2
+    scores[-1, 1] = 0
+    audit, _ = summarize_backtest(scores)
+    assert audit["meanMatches"] == 0 and audit["randomBaseline"] == 1
+    matches = np.asarray([[[0, 3]], [[1, 4]]])
+    metrics = match_summary(matches, np.zeros_like(matches))
+    assert metrics["meanMatches"] == 2 and metrics["threePlusRate"] == 0.5
+    assert metrics["differenceCI95"] == [1.5, 2.5]
+    assert match_summary(matches, matches)["differenceCI95"] == [0, 0]
+    fallback, _ = build_backtest_recommendations(draws[:100])
+    assert fallback["selectedMethod"] == "uniform"
+    assert fallback["meanMatches"] is None and fallback["testedRounds"] == 0
+    draw = {"round": 100, "numbers": [1, 2, 3, 4, 5, 6], "bonus": 7}
+    pred = {"targetRound": 100, "sourceLatestRound": 99, "model": MODEL_NAME,
+            "recommendations": [{"method": "m", "numbers": [1, 2, 3, 10, 11, 7]}]}
+    entries = reconcile_history(upsert_entry([], prediction_to_entry(pred), replace=True), [draw])
     match = entries[0]["result"]["matches"][0]
-    assert match["matchCount"] == 3, match
-    assert match["bonusMatched"] is True, match
-
-    # 이미 채점된 항목은 다시 채점하지 않음 / 미추첨 회차는 result 없음
-    entries = reconcile_history(entries, draws)
-    assert entries[0]["result"]["matches"][0]["matchCount"] == 3
-    future = upsert_entry(entries, prediction_to_entry({**pred_99, "targetRound": 101}), replace=True)
-    future = reconcile_history(future, draws)
-    assert next(e for e in future if e["targetRound"] == 101)["result"] is None
-
-    # 통계 추천: 3세트, 유효성, 재현성, 역대/번들 중복 제외
-    rng_a = np.random.default_rng(SEED)
-    fake_draws = [
-        {"round": r, "numbers": sorted(int(n) + 1 for n in rng_a.choice(45, size=6, replace=False))}
-        for r in range(1, 121)
-    ]
-    extra_forbidden = {(1, 2, 3, 4, 5, 6)}
-    recs_a = stat_recommendations(fake_draws, np.random.default_rng(7), forbidden=extra_forbidden)
-    recs_b = stat_recommendations(fake_draws, np.random.default_rng(7), forbidden=extra_forbidden)
-    assert len(recs_a) == STAT_SETS
-    profile = overall_profile(fake_draws)
-    recent4 = [n for d in fake_draws[-WINDOW_RECENT:] for n in d["numbers"]]
-    slots = len(recent4) + 6
-    deficit_digits = {
-        d for d in range(10)
-        if profile["digitShare"][d] * slots - sum(1 for n in recent4 if n % 10 == d) >= 1
-    }
-    for rec in recs_a:
-        nums = rec["numbers"]
-        assert len(nums) == 6 and len(set(nums)) == 6 and all(1 <= n <= 45 for n in nums), nums
-        assert tuple(nums) not in {tuple(d["numbers"]) for d in fake_draws} | extra_forbidden
-        reason = rec["reason"]
-        assert reason["endingNumbers"] == [n for n in nums if n % 10 in deficit_digits], reason
-        assert reason["consecutiveRuns"] == consecutive_runs(nums), reason
-
-    # 창 편차 검증: 창 비율이 전체 비율과 같으면 편차 0
-    uniform_draws = [{"round": r, "numbers": [1, 2, 13, 24, 35, 41]} for r in range(1, 11)]
-    uprofile = overall_profile(uniform_draws)
-    urecent = [n for d in uniform_draws[-WINDOW_RECENT:] for n in d["numbers"]]
-    assert window_deviation(uprofile, urecent + [1, 2, 13, 24, 35, 41]) < 1e-9
-    assert recs_a == recs_b, "stat recommendations must be reproducible with same rng"
-    assert len({tuple(r["numbers"]) for r in recs_a}) == STAT_SETS, "sets must be unique"
-
-    first_candidate = generate_candidates(np.random.default_rng(SEED), 1)[0]
-    forbidden = {tuple(first_candidate)}
-    candidates_a = generate_candidates(
-        np.random.default_rng(SEED), 20, forbidden
-    )
-    candidates_b = generate_candidates(
-        np.random.default_rng(SEED), 20, forbidden
-    )
-    assert candidates_a == candidates_b
-    assert len(candidates_a) == len({tuple(c) for c in candidates_a}) == 20
-    assert any(not matches_legacy_balance(c) for c in candidates_a), "shape rules must not filter candidates"
-    assert all(tuple(c) not in forbidden for c in candidates_a)
-
-    sequences = np.stack(
-        [np.stack([to_multihot(d["numbers"]) for d in fake_draws[:10]])]
-    )
-    positives = np.stack([to_multihot([1, 8, 15, 22, 29, 36])])
-    ex_seq, ex_cand, ex_label = expand_scorer_examples(
-        sequences, positives, np.random.default_rng(SEED)
-    )
-    assert ex_seq.shape == (NEGATIVES_PER_POSITIVE + 1, 10, 45)
-    assert ex_cand.shape == (NEGATIVES_PER_POSITIVE + 1, 45)
-    assert ex_label.tolist() == [1.0] + [0.0] * NEGATIVES_PER_POSITIVE
-    assert all(len(multihot_to_numbers(v)) == PICK for v in ex_cand)
-
-    weights = selection_weights(np.asarray([0.9, 0.0, -10.0]))
-    assert np.isclose(weights.sum(), 1.0)
-    assert np.all(weights > 0), weights
-    assert weights[0] > weights[1] > weights[2], weights
-
-    scored_candidates = [
-        [1, 8, 15, 22, 29, 36],
-        [2, 9, 16, 23, 30, 37],
-        [1, 8, 17, 24, 31, 38],
-    ]
-    selected = select_scored_recommendations(
-        scored_candidates,
-        np.asarray([0.9, 0.8, 0.7]),
-        np.random.default_rng(9),
-    )
-    assert [rec["method"] for rec in selected] == [
-        "lstm-weighted-selection",
-        "lstm-weighted-selection",
-    ]
-    assert len({tuple(rec["numbers"]) for rec in selected}) == 2
-
-    assert choose_backtest_method(np.asarray([0.79, 0.81, 0.9])) == 2
-    assert choose_backtest_method(np.asarray([0.81, 0.80, 0.79])) == 0
-    assert choose_backtest_method(np.asarray([0.8, 0.8, 0.8])) == 0
-
-    backtest_draws = [
-        {
-            "round": r,
-            "numbers": sorted(
-                int(n) + 1
-                for n in np.random.default_rng(SEED + r).choice(45, size=6, replace=False)
-            ),
-        }
-        for r in range(1, 221)
-    ]
-    summary_a, backtest_a = build_backtest_recommendations(backtest_draws)
-    summary_b, backtest_b = build_backtest_recommendations(backtest_draws)
-    historical_backtest = {tuple(d["numbers"]) for d in backtest_draws}
-    assert summary_a == summary_b
-    assert backtest_a == backtest_b
-    assert summary_a["metric"] == "mean-matches-per-set"
-    assert summary_a["testedRounds"] == 20
-    assert len(backtest_a) == BACKTEST_SETS
-    assert len({tuple(rec["numbers"]) for rec in backtest_a}) == BACKTEST_SETS
-    assert all(rec["method"] == "walk-forward-backtest" for rec in backtest_a)
-    assert all(tuple(rec["numbers"]) not in historical_backtest for rec in backtest_a)
-    assert all(
-        len(rec["numbers"]) == PICK
-        and len(set(rec["numbers"])) == PICK
-        and all(1 <= n <= NUM_RANGE for n in rec["numbers"])
-        for rec in backtest_a
-    )
-
-    synthetic_draws = [
-        {"round": r, "numbers": [1, 2, 3, 4, 5, 6]}
-        for r in range(1, 221)
-    ]
-    synthetic_summary, _ = build_backtest_recommendations(synthetic_draws)
-    assert synthetic_summary["selectedMethod"] == "frequency-all"
-
-    scores_with_future = evaluate_backtest_round(backtest_draws, 205)
-    scores_without_future = evaluate_backtest_round(backtest_draws[:206], 205)
-    assert np.array_equal(scores_with_future, scores_without_future)
-
-    fallback_summary, fallback_recs = build_backtest_recommendations(backtest_draws[:100])
-    assert fallback_summary["selectedMethod"] == "uniform"
-    assert fallback_summary["testedRounds"] == 0
-    assert len(fallback_recs) == BACKTEST_SETS
-
+    assert match["matchCount"] == 3 and match["bonusMatched"]
+    assert entries[0]["model"] == MODEL_NAME
+    assert upsert_entry(entries, prediction_to_entry(pred), replace=False) == entries
+    entries = upsert_entry(entries, prediction_to_entry({**pred, "targetRound": 101}), replace=True)
+    assert reconcile_history(entries, [draw])[-1]["result"] is None
     print("selftest ok")
     return 0
 
@@ -722,110 +560,95 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--selftest", action="store_true", help="추천/이력 핵심 로직 검증 (TF 불필요)")
     args = parser.parse_args()
-
     if args.selftest:
         return selftest()
+    if min(args.window, args.epochs, args.batch_size) < 1:
+        parser.error("window, epochs and batch-size must be positive")
 
-    # --- 재현성: numpy / python / tensorflow 시드 고정 ---
     import tensorflow as tf
 
     tf.keras.utils.set_random_seed(SEED)
     tf.config.experimental.enable_op_determinism()
     draws = load_draws(DATA_PATH)
     source_latest = draws[-1]["round"]
-    target_round = source_latest + 1
-
     vectors = np.stack([to_multihot(d["numbers"]) for d in draws])
     x, y = build_dataset(vectors, args.window)
-    if len(x) < MIN_TRAIN_SAMPLES:
-        raise SystemExit(
-            f"학습 샘플 부족: {len(x)} < {MIN_TRAIN_SAMPLES} (window={args.window})"
-        )
-
-    split = int(len(x) * (1.0 - VALIDATION_FRACTION))
-    if split <= 0 or split >= len(x):
-        raise SystemExit("시간순 검증 구간을 만들 수 없습니다")
-    train_seq, train_pos = x[:split], y[:split]
-    val_seq, val_pos = x[split:], y[split:]
-    train_x, train_candidates, train_labels = expand_scorer_examples(
-        train_seq, train_pos, np.random.default_rng(SEED)
-    )
-    val_x, val_candidates, val_labels = expand_scorer_examples(
-        val_seq, val_pos, np.random.default_rng(SEED + 1)
-    )
-
-    model = build_combination_scorer(tf, args.window)
-    early = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=8, restore_best_weights=True
-    )
+    train_end, test_start = chronological_split(len(x))
+    model = build_number_model(tf, args.window)
+    early = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=8, restore_best_weights=True)
     history = model.fit(
-        [train_x, train_candidates],
-        train_labels,
-        validation_data=([val_x, val_candidates], val_labels),
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        callbacks=[early],
-        verbose=2,
+        x[:train_end], y[:train_end],
+        validation_data=(x[train_end:test_start], y[train_end:test_start]),
+        epochs=args.epochs, batch_size=args.batch_size, callbacks=[early], verbose=2,
     )
-    validation_auc = float(
-        model.evaluate(
-            [val_x, val_candidates], val_labels, verbose=0, return_dict=True
-        )["auc"]
-    )
-
+    best_epoch = int(np.argmin(history.history["val_loss"])) + 1
+    validation = model.evaluate(x[train_end:test_start], y[train_end:test_start],
+                                verbose=0, return_dict=True)
+    # 검증으로 epoch를 고른 뒤, 한 번도 조정에 사용하지 않은 마지막 구간을 평가한다.
+    test_scores = model.predict(x[test_start:], verbose=0)
+    test_metrics = model.evaluate(x[test_start:], y[test_start:], verbose=0, return_dict=True)
+    matches = np.asarray([
+        comparison_matches(draws, args.window + test_start + offset, weights)
+        for offset, weights in enumerate(test_scores)
+    ])
+    comparison = {
+        "evaluationMode": "chronological-holdout-v2",
+        "model": MODEL_NAME,
+        "trainingThroughRound": draws[args.window + train_end - 1]["round"],
+        "validationThroughRound": draws[args.window + test_start - 1]["round"],
+        "testStartRound": draws[args.window + test_start]["round"],
+        "testEndRound": source_latest,
+        "testedRounds": len(test_scores),
+        "setsPerMethod": COMPARISON_SETS,
+        "seedCount": len(EVALUATION_SEEDS),
+        "lstmRefitDuringTest": False,
+        "testAuc": round(float(test_metrics["auc"]), 4),
+        "brierScore": round(float(np.mean((test_scores - y[test_start:]) ** 2)), 6),
+        "uniformBrierScore": round(float(np.mean((PICK / NUM_RANGE - y[test_start:]) ** 2)), 6),
+        "methods": [
+            {"method": method, **match_summary(matches[:, index], matches[:, 0])}
+            for index, method in enumerate(("uniform", "weighted-statistical-v2", "lstm-number-weighted-v2"))
+        ],
+    }
+    # 최종 추천 모델은 검증에서 정한 epoch 수로 최신 회차까지 다시 학습한다.
+    tf.keras.backend.clear_session()
+    tf.keras.utils.set_random_seed(SEED)
+    model = build_number_model(tf, args.window)
+    model.fit(x, y, epochs=best_epoch, batch_size=args.batch_size, verbose=2)
+    weights = model.predict(vectors[-args.window:][np.newaxis, ...], verbose=0)[0]
     historical = {tuple(d["numbers"]) for d in draws}
-    # ponytail: 50k 후보로 CI 비용을 제한하며, 백테스트가 불안정하면 수를 늘린다.
-    candidates = generate_candidates(
-        np.random.default_rng(SEED + 2),
-        INFERENCE_CANDIDATES,
-        historical,
-    )
-    candidate_vectors = np.stack([to_multihot(candidate) for candidate in candidates])
-    sequence_batch = np.repeat(
-        vectors[-args.window :][np.newaxis, ...], len(candidates), axis=0
-    )
-    scores = model.predict(
-        [sequence_batch, candidate_vectors], batch_size=1024, verbose=0
-    ).reshape(-1)
-    lstm_recommendations = select_scored_recommendations(
-        candidates, scores, np.random.default_rng(SEED + 3)
-    )
-    selected_lstm = {tuple(rec["numbers"]) for rec in lstm_recommendations}
-    backtest, backtest_recommendations = build_backtest_recommendations(draws)
-
+    lstm = lstm_recommendations(weights, np.random.default_rng(SEED + 3), forbidden=historical)
+    selected = {tuple(rec["numbers"]) for rec in lstm}
+    stats = stat_recommendations(draws, np.random.default_rng(SEED + 4), forbidden=selected)
+    selected.update(tuple(rec["numbers"]) for rec in stats)
+    backtest, backtest_recs = build_backtest_recommendations(draws, forbidden=selected)
+    recommendations = lstm + stats + backtest_recs
+    number_sets = [set(rec["numbers"]) for rec in recommendations]
+    if len({tuple(rec["numbers"]) for rec in recommendations}) != 10:
+        raise ValueError("recommendation bundle must contain ten distinct sets")
     result = {
         "schemaVersion": 2,
         "model": MODEL_NAME,
         "sourceLatestRound": source_latest,
-        "targetRound": target_round,
-        "trainedAt": datetime.now(timezone.utc)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z"),
+        "targetRound": source_latest + 1,
+        "trainedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "window": args.window,
-        "epochs": int(len(history.history["loss"])),  # 실제 실행된 에폭 수
-        "trainSampleCount": int(len(x)),
-        "validationAuc": round(validation_auc, 4),
-        "candidateCount": len(candidates),
+        "epochs": best_epoch,
+        "trainSampleCount": len(x),
+        "validationAuc": round(float(validation["auc"]), 4),
+        "comparison": comparison,
         "backtest": backtest,
-        "recommendations": [
-            *lstm_recommendations,
-            *stat_recommendations(
-                draws, np.random.default_rng(SEED + 4), forbidden=selected_lstm
-            ),
-            *backtest_recommendations,
-        ],
+        "diversity": {
+            "uniqueNumbers": len(set.union(*number_sets)),
+            "maxSharedNumbers": max(len(a & b) for i, a in enumerate(number_sets) for b in number_sets[i + 1:]),
+        },
+        "recommendations": recommendations,
         "warning": WARNING,
     }
-
-    update_history(result, draws)  # OUT_PATH 덮어쓰기 전에 기존 예측을 이력에 보존
-    OUT_PATH.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    print(
-        f"saved {OUT_PATH.name}: source={source_latest} target={target_round} "
-        f"samples={len(x)} epochs={result['epochs']} "
-        f"validation_auc={validation_auc:.4f} candidates={len(candidates)}"
-    )
+    update_history(result, draws)
+    OUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"saved {OUT_PATH.name}: source={source_latest} target={source_latest + 1} "
+          f"samples={len(x)} epochs={best_epoch} test_auc={comparison['testAuc']}")
     return 0
 
 

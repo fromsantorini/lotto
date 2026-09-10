@@ -1,206 +1,259 @@
 {
   "schemaVersion": 2,
-  "model": "keras-lstm-combination-scorer-v1",
+  "model": "keras-lstm-number-scorer-v2",
   "sourceLatestRound": 1240,
   "targetRound": 1241,
-  "trainedAt": "2026-09-05T16:26:06Z",
+  "trainedAt": "2026-09-09T10:12:48Z",
   "window": 10,
-  "epochs": 9,
+  "epochs": 2,
   "trainSampleCount": 1230,
-  "validationAuc": 0.4847,
-  "candidateCount": 50000,
+  "validationAuc": 0.5111,
+  "comparison": {
+    "evaluationMode": "chronological-holdout-v2",
+    "model": "keras-lstm-number-scorer-v2",
+    "trainingThroughRound": 994,
+    "validationThroughRound": 1117,
+    "testStartRound": 1118,
+    "testEndRound": 1240,
+    "testedRounds": 123,
+    "setsPerMethod": 2,
+    "seedCount": 3,
+    "lstmRefitDuringTest": false,
+    "testAuc": 0.5004,
+    "brierScore": 0.115649,
+    "uniformBrierScore": 0.115556,
+    "methods": [
+      {
+        "method": "uniform",
+        "meanMatches": 0.8049,
+        "threePlusRate": 0.023,
+        "differenceVsRandom": 0,
+        "differenceCI95": [
+          0,
+          0
+        ],
+        "evidence": "not-established"
+      },
+      {
+        "method": "weighted-statistical-v2",
+        "meanMatches": 0.8117,
+        "threePlusRate": 0.0257,
+        "differenceVsRandom": 0.0068,
+        "differenceCI95": [
+          -0.0501,
+          0.0596
+        ],
+        "evidence": "not-established"
+      },
+      {
+        "method": "lstm-number-weighted-v2",
+        "meanMatches": 0.8076,
+        "threePlusRate": 0.0271,
+        "differenceVsRandom": 0.0027,
+        "differenceCI95": [
+          -0.0257,
+          0.0312
+        ],
+        "evidence": "not-established"
+      }
+    ]
+  },
   "backtest": {
+    "meanMatches": 0.8056,
+    "threePlusRate": 0.0242,
+    "differenceVsRandom": 0.0007,
+    "differenceCI95": [
+      -0.0046,
+      0.0063
+    ],
+    "evidence": "not-established",
     "metric": "mean-matches-per-set",
-    "testedRounds": 1040,
-    "selectedMethod": "frequency-window",
-    "selectedWindow": 200,
-    "selectedHalfLife": null,
-    "meanMatches": 0.8225,
-    "randomBaseline": 0.7944
+    "evaluationMode": "prequential-selection-v2",
+    "testedRounds": 990,
+    "selectionRounds": 1040,
+    "warmupRounds": 50,
+    "seedCount": 3,
+    "setsPerMethod": 5,
+    "randomBaseline": 0.8048,
+    "selectedMethod": "uniform",
+    "selectedWindow": null,
+    "selectedHalfLife": null
+  },
+  "diversity": {
+    "uniqueNumbers": 34,
+    "maxSharedNumbers": 3
   },
   "recommendations": [
     {
-      "method": "lstm-weighted-selection",
+      "method": "lstm-number-weighted-v2",
       "numbers": [
-        6,
-        14,
-        17,
-        20,
-        26,
-        37
-      ],
-      "modelScore": 0.219254
-    },
-    {
-      "method": "lstm-weighted-selection",
-      "numbers": [
-        6,
-        7,
-        9,
-        12,
-        23,
-        44
-      ],
-      "modelScore": 0.147758
-    },
-    {
-      "method": "weighted-statistical",
-      "numbers": [
-        3,
-        21,
+        19,
+        27,
+        29,
+        31,
         37,
-        38,
-        40,
-        45
-      ],
-      "reason": {
-        "oddEven": "4:2",
-        "lowHigh": "2:4",
-        "sum": 184,
-        "frequentNumbers": [
-          3,
-          37,
-          38
-        ],
-        "coldNumbers": [
-          21,
-          45
-        ],
-        "carryOverNumbers": [],
-        "endingNumbers": [
-          37,
-          45
-        ],
-        "consecutiveRuns": [
-          [
-            37,
-            38
-          ]
-        ]
-      }
+        38
+      ]
     },
     {
-      "method": "weighted-statistical",
+      "method": "lstm-number-weighted-v2",
       "numbers": [
-        5,
-        18,
         24,
         25,
-        31,
-        36
+        27,
+        35,
+        36,
+        37
+      ]
+    },
+    {
+      "method": "weighted-statistical-v2",
+      "numbers": [
+        3,
+        6,
+        16,
+        18,
+        33,
+        35
       ],
       "reason": {
         "oddEven": "3:3",
-        "lowHigh": "2:4",
-        "sum": 139,
+        "lowHigh": "4:2",
+        "sum": 111,
         "frequentNumbers": [
-          31
+          3,
+          16
         ],
         "coldNumbers": [
-          5
-        ],
-        "carryOverNumbers": [
-          31
-        ],
-        "endingNumbers": [
-          5,
-          24,
-          25,
-          36
-        ],
-        "consecutiveRuns": [
-          [
-            24,
-            25
-          ]
-        ]
-      }
-    },
-    {
-      "method": "weighted-statistical",
-      "numbers": [
-        2,
-        18,
-        21,
-        28,
-        34,
-        37
-      ],
-      "reason": {
-        "oddEven": "2:4",
-        "lowHigh": "3:3",
-        "sum": 140,
-        "frequentNumbers": [
-          28,
-          37
-        ],
-        "coldNumbers": [
-          21,
-          34
+          33
         ],
         "carryOverNumbers": [],
-        "endingNumbers": [
-          34,
-          37
-        ],
+        "endingNumbers": [],
         "consecutiveRuns": []
       }
     },
     {
-      "method": "walk-forward-backtest",
+      "method": "weighted-statistical-v2",
+      "numbers": [
+        4,
+        13,
+        27,
+        28,
+        40,
+        42
+      ],
+      "reason": {
+        "oddEven": "2:4",
+        "lowHigh": "2:4",
+        "sum": 154,
+        "frequentNumbers": [
+          13,
+          27,
+          28
+        ],
+        "coldNumbers": [
+          4
+        ],
+        "carryOverNumbers": [
+          13
+        ],
+        "endingNumbers": [],
+        "consecutiveRuns": [
+          [
+            27,
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "method": "weighted-statistical-v2",
+      "numbers": [
+        23,
+        24,
+        34,
+        35,
+        36,
+        39
+      ],
+      "reason": {
+        "oddEven": "3:3",
+        "lowHigh": "0:6",
+        "sum": 191,
+        "frequentNumbers": [],
+        "coldNumbers": [
+          34
+        ],
+        "carryOverNumbers": [],
+        "endingNumbers": [],
+        "consecutiveRuns": [
+          [
+            23,
+            24
+          ],
+          [
+            34,
+            35,
+            36
+          ]
+        ]
+      }
+    },
+    {
+      "method": "walk-forward-backtest-v2",
       "numbers": [
         1,
-        7,
-        19,
-        29,
-        33,
-        44
+        4,
+        16,
+        32,
+        39,
+        41
       ]
     },
     {
-      "method": "walk-forward-backtest",
+      "method": "walk-forward-backtest-v2",
+      "numbers": [
+        3,
+        4,
+        6,
+        21,
+        29,
+        34
+      ]
+    },
+    {
+      "method": "walk-forward-backtest-v2",
       "numbers": [
         4,
-        14,
+        13,
+        20,
+        21,
         24,
-        29,
-        36,
+        28
+      ]
+    },
+    {
+      "method": "walk-forward-backtest-v2",
+      "numbers": [
+        7,
+        9,
+        22,
+        30,
+        41,
         45
       ]
     },
     {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        5,
-        9,
-        20,
-        25,
-        30,
-        44
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
-      "numbers": [
-        5,
-        13,
-        14,
-        20,
-        23,
-        24
-      ]
-    },
-    {
-      "method": "walk-forward-backtest",
+      "method": "walk-forward-backtest-v2",
       "numbers": [
         7,
-        13,
+        10,
+        23,
+        24,
         29,
-        32,
-        35,
-        38
+        34
       ]
     }
   ],
-  "warning": "모델 점수는 후보 간 상대 비교값이며 당첨 확률이 아닙니다. 로또는 독립시행이므로 이 결과는 실험용입니다."
+  "warning": "번호별 모델 점수는 추천 가중치이며 조합의 당첨 확률이 아닙니다. 로또는 독립시행이므로 이 결과는 실험용입니다."
 }

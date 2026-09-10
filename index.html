@@ -603,6 +603,20 @@
       };
     }
 
+    function finiteNumber(value) {
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
+    }
+
+    function evaluationNumber(value, digits = 3) {
+      return finiteNumber(value) === null ? "-" : value.toFixed(digits);
+    }
+
+    function evaluationInterval(interval) {
+      return Array.isArray(interval) && interval.length === 2
+        && interval.every((value) => finiteNumber(value) !== null) && interval[0] <= interval[1]
+        ? interval.map((value) => value.toFixed(3)).join(" ~ ") : "-";
+    }
+
     async function loadLstmPrediction() {
       try {
         const response = await fetch(LSTM_URL, { cache: "no-store" });
@@ -615,7 +629,7 @@
             method: String(rec.method || "lstm"),
             numbers: Array.isArray(rec.numbers) ? rec.numbers.map(Number) : [],
             reason: rec.reason && typeof rec.reason === "object" ? rec.reason : null,
-            modelScore: Number.isFinite(Number(rec.modelScore)) ? Number(rec.modelScore) : null
+            modelScore: finiteNumber(rec.modelScore)
           }))
           .filter((rec) =>
             rec.numbers.length === 6
@@ -632,19 +646,26 @@
           targetRound: Number(data.targetRound || 0),
           trainedAt: data.trainedAt || null,
           window: Number(data.window || 0),
-          validationAuc: Number.isFinite(Number(data.validationAuc)) ? Number(data.validationAuc) : null,
+          validationAuc: finiteNumber(data.validationAuc),
           candidateCount: Number.isInteger(Number(data.candidateCount)) ? Number(data.candidateCount) : 0,
           recommendations,
+          comparison: data.comparison?.evaluationMode === "chronological-holdout-v2"
+            && Array.isArray(data.comparison.methods) ? data.comparison : null,
           backtest: data.backtest && typeof data.backtest === "object" ? {
             metric: String(data.backtest.metric || ""),
+            evaluationMode: String(data.backtest.evaluationMode || ""),
+            seedCount: finiteNumber(data.backtest.seedCount),
+            warmupRounds: finiteNumber(data.backtest.warmupRounds),
+            threePlusRate: finiteNumber(data.backtest.threePlusRate),
+            differenceCI95: data.backtest.differenceCI95,
             testedRounds: Number(data.backtest.testedRounds || 0),
             selectedMethod: String(data.backtest.selectedMethod || "uniform"),
             selectedWindow: data.backtest.selectedWindow == null
               ? null : Number(data.backtest.selectedWindow),
             selectedHalfLife: data.backtest.selectedHalfLife == null
               ? null : Number(data.backtest.selectedHalfLife),
-            meanMatches: data.backtest.meanMatches === null ? null : Number(data.backtest.meanMatches),
-            randomBaseline: data.backtest.randomBaseline === null ? null : Number(data.backtest.randomBaseline)
+            meanMatches: finiteNumber(data.backtest.meanMatches),
+            randomBaseline: finiteNumber(data.backtest.randomBaseline)
           } : null,
           warning: String(data.warning || "")
         };
@@ -1250,6 +1271,9 @@
     }
 
     function buildRecommendationReasonSummary(recommendation) {
+      if (recommendation.method === "weighted-statistical-v2") {
+        return "최근 100회 출현 횟수에 번호당 1을 더한 가중치로 뽑았습니다. 홀짝·합계·연번은 조합의 특징이며 강제 조건이 아닙니다.";
+      }
       const hot = recommendation.reason.frequentNumbers;
       const cold = recommendation.reason.coldNumbers;
       if (recommendation.method === "fallback-random") {
@@ -1313,29 +1337,22 @@
       const averageOf = (matches) => matches.length
         ? matches.reduce((total, match) => total + match.matchCount, 0) / matches.length
         : 0;
-      const lstmMatches = allMatches.filter((match) => String(match.method).startsWith("lstm"));
-      const backtestMatches = allMatches.filter((match) =>
-        String(match.method) === "walk-forward-backtest"
-      );
-      const statMatches = allMatches.filter((match) =>
-        !String(match.method).startsWith("lstm")
-        && String(match.method) !== "walk-forward-backtest"
-      );
+      const methodGroups = [...new Set(allMatches.map((match) => match.method))].map((method) => ({
+        method, matches: allMatches.filter((match) => match.method === method)
+      }));
       const bestMatch = allMatches.reduce((best, match) => Math.max(best, match.matchCount), 0);
 
       panel.innerHTML = `
         <div class="section-head">
           <div>
             <h2>추천 성적표</h2>
-            <p class="muted">매주 CI가 생성한 기존 추천 5세트와 별도 백테스트 추천 5세트를 회차별로 누적하고 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다.</p>
+            <p class="muted">매주 CI가 생성한 기존 추천 5세트와 별도 백테스트 추천 5세트를 회차별로 누적하고 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다. 방식별 세트 수와 버전이 다르므로 아래 실전 누적값은 동일 조건 비교가 아닙니다.</p>
           </div>
         </div>
         <div class="stat-pills" style="margin-bottom:12px;">
           <span class="stat-pill">채점 완료 ${scored.length}회차 · ${allMatches.length}세트</span>
-          <span class="stat-pill">전체 평균 적중 ${averageOf(allMatches).toFixed(2)}개</span>
-          ${lstmMatches.length ? `<span class="stat-pill">딥러닝 평균 ${averageOf(lstmMatches).toFixed(2)}개</span>` : ""}
-          ${statMatches.length ? `<span class="stat-pill">통계 평균 ${averageOf(statMatches).toFixed(2)}개</span>` : ""}
-          ${backtestMatches.length ? `<span class="stat-pill">백테스트 평균 ${averageOf(backtestMatches).toFixed(2)}개</span>` : ""}
+          <span class="stat-pill">전체 버전 평균 적중 ${averageOf(allMatches).toFixed(2)}개</span>
+          ${methodGroups.map((group) => `<span class="stat-pill">${methodLabel(group.method)} 평균 ${averageOf(group.matches).toFixed(2)}개 · ${group.matches.length}세트 · 3개 이상 ${group.matches.filter((m) => m.matchCount >= 3).length}세트</span>`).join("")}
           <span class="stat-pill">이론 기대값 0.80개</span>
           ${allMatches.length ? `<span class="stat-pill">최고 기록 ${bestMatch}개 일치</span>` : ""}
         </div>
@@ -1459,12 +1476,16 @@
     }
 
     function methodLabel(method) {
+      if (method === "uniform") return "균등 무작위";
+      if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
+      if (method === "weighted-statistical-v2") return "통계 빈도 가중 v2";
+      if (method === "walk-forward-backtest-v2") return "시간순 백테스트 선택 v2";
       if (method === "lstm-combination-best") return "LSTM 최고 점수 조합";
       if (method === "lstm-combination-diverse") return "LSTM 다양성 조합";
       if (method === "balanced-statistical") return "통계 균형 조합";
-      if (method === "lstm-weighted-selection") return "LSTM 가중 선택 조합";
-      if (method === "weighted-statistical") return "통계 가중 선택 조합";
-      if (method === "walk-forward-backtest") return "시간순 백테스트 선택";
+      if (method === "lstm-weighted-selection") return "LSTM 가중 선택 v1";
+      if (method === "weighted-statistical") return "통계 가중 선택 v1";
+      if (method === "walk-forward-backtest") return "시간순 백테스트 선택 v1";
       return method;
     }
 
@@ -1484,7 +1505,9 @@
         <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f0f6ff;${isStale ? "opacity:0.65;" : ""}">
           <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span><span class="stat-pill">2세트</span></h3>
           <p class="muted">학습 기준 ${prediction.sourceLatestRound}회 → 예측 대상 ${prediction.targetRound}회 · 학습 시각 ${trained} · 입력 ${prediction.window}회 시퀀스</p>
-          <p class="muted">검증 AUC ${prediction.validationAuc === null ? "-" : prediction.validationAuc.toFixed(3)} · 평가 후보 ${prediction.candidateCount.toLocaleString()}개</p>
+          <p class="muted">${prediction.comparison
+            ? "번호별 출현 점수를 가중치로 사용합니다. 아래 비교표에서 미사용 구간의 성적을 확인하세요."
+            : `검증 AUC ${evaluationNumber(prediction.validationAuc)} · 평가 후보 ${prediction.candidateCount.toLocaleString()}개 · 별도 평가 구간 없음`}</p>
           ${isStale ? `<p class="warning">⚠ 데이터는 ${data.latestRound}회까지 갱신됐지만 학습은 ${prediction.sourceLatestRound}회 기준입니다. 재학습 대기 중이라 참고용입니다.</p>` : ""}
           <div class="recommendation-list" style="margin-top:12px;">
             ${prediction.recommendations.filter((rec) => rec.method.startsWith("lstm")).map((rec) => `
@@ -1504,7 +1527,7 @@
 
     function renderBacktestRecommendations(prediction) {
       const recommendations = prediction
-        ? prediction.recommendations.filter((rec) => rec.method === "walk-forward-backtest")
+        ? prediction.recommendations.filter((rec) => rec.method.startsWith("walk-forward-backtest"))
         : [];
       if (!recommendations.length) {
         return `<h3 style="margin:20px 0 8px;">백테스트 추천 <span class="stat-pill">대기 중</span></h3>
@@ -1512,6 +1535,7 @@
       }
 
       const summary = prediction.backtest;
+      const prequential = summary?.evaluationMode === "prequential-selection-v2";
       const selected = !summary || summary.selectedMethod === "uniform"
         ? "균등 무작위"
         : summary.selectedMethod === "frequency-all"
@@ -1525,12 +1549,18 @@
         ? summary.randomBaseline.toFixed(3) : "-";
       return `
         <h3 style="margin:20px 0 8px;">백테스트 추천 <span class="stat-pill">${recommendations.length}세트</span></h3>
-        <p class="muted">과거 ${summary ? summary.testedRounds : 0}회차 시간순 평가에서 세트당 평균 적중 수가 가장 높았던 방식: ${selected}</p>
+        <p class="muted">이번 추천 방식: ${selected}</p>
+        <p class="muted">${prequential
+          ? `이전 성적으로 방식을 선택한 뒤 다음 회차를 채점했습니다. 준비 구간 ${evaluationNumber(summary.warmupRounds, 0)}회 제외 · 평가 ${summary.testedRounds}회 · 난수 시드 ${evaluationNumber(summary.seedCount, 0)}개.`
+          : "이전 버전: 방식 선택에 사용한 과거 성적이며 별도 검증 성적이 아닙니다."}</p>
         <div class="stat-pills">
-          <span class="stat-pill">평균 적중 ${mean}개</span>
+          <span class="stat-pill">${prequential ? "선택 전략 평균" : "선택 구간 평균"} 적중 ${mean}개</span>
           <span class="stat-pill">무작위 기준 ${baseline}개</span>
           <span class="stat-pill">이론 기대값 0.800개</span>
+          ${prequential ? `<span class="stat-pill">3개 이상 일치 ${finiteNumber(summary.threePlusRate) === null ? "-" : (summary.threePlusRate * 100).toFixed(2) + "%"}</span>
+          <span class="stat-pill">무작위 대비 차이 95% 구간 ${evaluationInterval(summary.differenceCI95)}</span>` : ""}
         </div>
+        ${prequential ? '<p class="muted">평균은 회차마다 선택된 방식 전체의 성적입니다. 이번에 선택된 한 방식의 고정 성적이 아닙니다. 신뢰구간은 회차 단위 재표집 근사치입니다.</p>' : ""}
         <div class="recommendation-list" style="margin-top:12px;">
           ${recommendations.map((recommendation) => `
             <article class="recommendation-card">
@@ -1544,6 +1574,40 @@
         <p class="warning" style="margin-top:12px;">과거 백테스트 결과이며 미래 당첨 성과를 보장하지 않습니다.</p>`;
     }
 
+
+    function renderMethodComparison(prediction) {
+      const comparison = prediction?.comparison;
+      if (!comparison) return '<p class="muted">동일 조건 비교는 개선 버전 재학습 후 표시됩니다.</p>';
+      const methods = comparison.methods.filter((row) =>
+        ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2"].includes(row?.method));
+      return `
+        <h3 style="margin:20px 0 8px;">동일 조건 추천 비교</h3>
+        <p class="muted">학습·조정에 사용하지 않은 ${evaluationNumber(comparison.testStartRound, 0)}~${evaluationNumber(comparison.testEndRound, 0)}회,
+          총 ${evaluationNumber(comparison.testedRounds, 0)}회 · 방식별 ${evaluationNumber(comparison.setsPerMethod, 0)}세트 · 난수 시드 ${evaluationNumber(comparison.seedCount, 0)}개.</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="추천 방식별 평가 성적">
+          <table>
+            <caption class="muted" style="text-align:left;padding:10px;">같은 평가 회차·세트 수로 비교한 성적</caption>
+            <thead><tr><th scope="col">방식</th><th scope="col">평균 적중</th><th scope="col">3개 이상 일치</th><th scope="col">무작위 대비 차이</th><th scope="col">차이의 95% 구간</th><th scope="col">해석</th></tr></thead>
+            <tbody>${methods.map((row) => `
+              <tr><th scope="row">${methodLabel(row.method)}</th>
+                <td>${evaluationNumber(row.meanMatches)}개</td>
+                <td>${finiteNumber(row.threePlusRate) === null ? "-" : (row.threePlusRate * 100).toFixed(2) + "%"}</td>
+                <td>${evaluationNumber(row.differenceVsRandom)}개</td>
+                <td>${evaluationInterval(row.differenceCI95)}</td>
+                <td>${row.method === "uniform" ? "비교 기준"
+                  : comparison.testedRounds >= 50 && evaluationInterval(row.differenceCI95) !== "-" && row.differenceCI95[0] > 0
+                    ? "이 구간에서 양의 차이 관측" : "우위 미확인"}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">평가 중 LSTM 가중치는 고정하고 매회 입력과 통계는 직전 회차까지 갱신했습니다. 다음 회차 추천은 전체 데이터로 재학습합니다.
+          신뢰구간은 회차 단위 재표집 근사치이며 여러 방식의 동시 비교를 보정한 확증 결과가 아닙니다.</p>
+        <details><summary>번호별 점수 진단</summary>
+          <p class="muted">평가 AUC ${evaluationNumber(comparison.testAuc)} · Brier 오차 ${evaluationNumber(comparison.brierScore, 6)} · 균등 기준 ${evaluationNumber(comparison.uniformBrierScore, 6)}.
+          Brier 오차는 작을수록 좋으며 AUC 0.5는 무작위 구분 수준입니다. 조합의 당첨 확률을 뜻하지 않습니다.</p>
+        </details>`;
+    }
+
     function renderRecommendations(state, data) {
       const panel = document.querySelector("#recommendPanel");
       if (data.draws.length === 0) {
@@ -1554,9 +1618,12 @@
       const statRecs = lstmPrediction
         ? lstmPrediction.recommendations.filter((rec) =>
             !rec.method.startsWith("lstm")
-            && rec.method !== "walk-forward-backtest"
+            && !rec.method.startsWith("walk-forward-backtest")
           )
         : [];
+      const sets = (lstmPrediction?.recommendations || []).map((rec) => new Set(rec.numbers));
+      const maxShared = sets.length > 1 ? Math.max(...sets.flatMap((set, index) =>
+        sets.slice(index + 1).map((other) => [...set].filter((n) => other.has(n)).length))) : 0;
       panel.innerHTML = `
         <div class="section-head">
           <div>
@@ -1565,9 +1632,12 @@
             <p class="muted">기존 딥러닝 2세트와 통계 3세트에 별도 백테스트 추천 5세트를 추가해 총 10세트가 매주 CI에서 생성됩니다. 어느 기기에서 보든 같은 번호입니다.</p>
           </div>
         </div>
+        ${sets.length ? `<p class="muted">전체 ${sets.length}세트 · 서로 다른 번호 ${new Set(sets.flatMap((set) => [...set])).size}개 · 두 세트 간 최대 겹침 ${maxShared}개. 분산 정도이며 당첨 확률 상승 지표는 아닙니다.</p>` : ""}
         ${renderLstmRecommendations(lstmPrediction, data)}
         <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">${statRecs.length}세트</span>${lstmPrediction ? `<span class="stat-pill">${lstmPrediction.targetRound}회 대상</span>` : ""}</h3>
-        <p class="muted">최근 100회차 빈도 기반 강세·소외·중간 번호를 섞고 홀짝·저고·합계 균형을 맞춘 조합입니다. 추첨 후 아래 성적표에서 자동 채점됩니다.</p>
+        <p class="muted">${statRecs.some((rec) => rec.method === "weighted-statistical-v2")
+          ? "최근 100회 빈도를 완만하게 반영합니다. 최근 부족한 끝수·연번을 채우는 보정은 사용하지 않습니다."
+          : "이전 버전 통계 추천입니다. 기존 규칙으로 생성된 조합을 표시합니다."} 추첨 후 아래 성적표에서 자동 채점됩니다.</p>
         <div class="recommendation-list" style="margin-top:12px;">
           ${statRecs.length ? statRecs.map((recommendation) => `
             <article class="recommendation-card">
@@ -1578,6 +1648,7 @@
           `).join("") : "<p>통계 추천이 아직 생성되지 않았습니다. 다음 데이터 갱신 때 자동 생성됩니다.</p>"}
         </div>
         ${renderBacktestRecommendations(lstmPrediction)}
+        ${renderMethodComparison(lstmPrediction)}
       `;
     }
 
