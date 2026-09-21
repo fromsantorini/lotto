@@ -1632,6 +1632,39 @@
         </details>`;
     }
 
+    function predictTransitionSet(draws) {
+      if (draws.length < 2 || !draws.every((draw) => draw && isValidDraw(draw))
+        || new Set(draws.map((draw) => draw.round)).size !== draws.length) return null;
+      const history = [...draws].sort((a, b) => a.round - b.round);
+      const counts = Array.from({ length: 46 }, () => Array(46).fill(0));
+      const samples = Array(46).fill(0);
+      let transitions = 0;
+      for (let i = 1; i < history.length; i++) {
+        if (history[i].round !== history[i - 1].round + 1) continue;
+        transitions++;
+        for (const previous of history[i - 1].numbers) {
+          samples[previous]++;
+          for (const next of history[i].numbers) counts[previous][next]++;
+        }
+      }
+      if (!transitions) return null;
+      const latest = history[history.length - 1];
+      // 45 virtual transitions at the uniform 6/45 rate soften sparse observations.
+      // ponytail: one-step associations only; compare on held-out draws before adding longer sequences.
+      const ranked = Array.from({ length: 45 }, (_, index) => {
+        const number = index + 1;
+        const score = latest.numbers.reduce((sum, previous) =>
+          sum + (counts[previous][number] + 6) / (samples[previous] + 45), 0) / 6;
+        return { number, score };
+      }).sort((a, b) => b.score - a.score || a.number - b.number);
+      return {
+        sourceLatestRound: latest.round,
+        targetRound: latest.round + 1,
+        transitions,
+        numbers: ranked.slice(0, 6).map((item) => item.number).sort((a, b) => a - b)
+      };
+    }
+
     function renderRecommendations(state, data) {
       const panel = document.querySelector("#recommendPanel");
       if (data.draws.length === 0) {
@@ -1645,18 +1678,30 @@
             && !rec.method.startsWith("walk-forward-backtest")
           )
         : [];
+      const transition = predictTransitionSet(data.draws);
       const sets = (lstmPrediction?.recommendations || []).map((rec) => new Set(rec.numbers));
+      if (transition) sets.push(new Set(transition.numbers));
       const maxShared = sets.length > 1 ? Math.max(...sets.flatMap((set, index) =>
         sets.slice(index + 1).map((other) => [...set].filter((n) => other.has(n)).length))) : 0;
       panel.innerHTML = `
         <div class="section-head">
           <div>
             <h2>추천 번호</h2>
-            <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 역대 1등 당첨번호 6개 조합과 완전히 같은 번호는 제외합니다.</p>
-            <p class="muted">기존 딥러닝 2세트와 통계 3세트에 별도 백테스트 추천 5세트를 추가해 총 10세트가 매주 CI에서 생성됩니다. 어느 기기에서 보든 같은 번호입니다.</p>
+            <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 기존 딥러닝·통계·백테스트 추천은 역대 1등 당첨번호와 완전히 같은 조합을 제외합니다.</p>
+            <p class="muted">기존 딥러닝 2세트·통계 3세트·백테스트 5세트에 독립적인 회차 전이 예측 1세트를 추가했습니다. 전이 예측은 당첨 이력이 갱신되면 자동 계산되며, 같은 데이터에서는 어느 기기에서 보든 같은 번호입니다.</p>
           </div>
         </div>
         ${sets.length ? `<p class="muted">전체 ${sets.length}세트 · 서로 다른 번호 ${new Set(sets.flatMap((set) => [...set])).size}개 · 두 세트 간 최대 겹침 ${maxShared}개. 분산 정도이며 당첨 확률 상승 지표는 아닙니다.</p>` : ""}
+        <h3 style="margin:20px 0 8px;">회차 전이 예측 <span class="stat-pill">1세트</span>${transition ? `<span class="stat-pill">${transition.targetRound}회 대상</span>` : ""}</h3>
+        ${transition ? `
+          <div class="recommendation-list">
+            <article class="recommendation-card">
+              ${renderBalls(transition.numbers)}
+              <p class="muted">${transition.sourceLatestRound}회까지 · 연속된 ${transition.transitions.toLocaleString()}쌍의 회차 분석</p>
+              <p>직전 당첨번호 각각이 과거에 나온 뒤, 바로 다음 회차에 등장한 번호를 집계했습니다. 적은 표본을 보정한 전이 점수를 평균 내어 상위 6개를 선택합니다. 동점이면 작은 번호를 우선합니다.</p>
+              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험이며, 예측력은 검증되지 않았습니다. 성적표 자동 채점에는 포함되지 않습니다.</p>
+            </article>
+          </div>` : `<p class="muted">전이 예측에는 유효한 연속 회차 이력이 필요합니다.</p>`}
         ${renderLstmRecommendations(lstmPrediction, data)}
         <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">${statRecs.length}세트</span>${lstmPrediction ? `<span class="stat-pill">${lstmPrediction.targetRound}회 대상</span>` : ""}</h3>
         <p class="muted">${statRecs.some((rec) => rec.method === "weighted-statistical-v2")

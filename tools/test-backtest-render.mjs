@@ -9,7 +9,7 @@ const panels = new Map();
 let data;
 const api = runInNewContext(`${script}\n({ loadLstmPrediction, renderBacktestRecommendations,
   renderMethodComparison, renderLstmScoreboard, renderRecommendations,
-  buildRecommendationReasonSummary, finiteNumber,
+  buildRecommendationReasonSummary, finiteNumber, predictTransitionSet,
   setPrediction(value) { lstmPrediction = value; } })`, {
   localStorage: { getItem: () => null },
   document: {
@@ -28,6 +28,43 @@ assert.equal(api.finiteNumber(Infinity), null);
 assert.equal(api.finiteNumber(0), 0);
 assert.match(api.renderBacktestRecommendations(null), /대기 중/);
 assert.match(api.renderMethodComparison(null), /재학습 후/);
+
+// Independent one-step prediction: A -> B -> A should select B, never the bonus.
+const groupA = [1, 2, 3, 4, 5, 6];
+const groupB = [11, 12, 13, 14, 15, 16];
+const transitionDraws = [groupA, groupB, groupA].map((numbers, index) => ({
+  round: index + 1, numbers, bonus: 45,
+}));
+const originalDraws = JSON.stringify(transitionDraws);
+const transition = api.predictTransitionSet(transitionDraws);
+assert.deepEqual(Array.from(transition.numbers), groupB);
+assert.equal(transition.targetRound, 4);
+assert.equal(transition.transitions, 2);
+assert.equal(JSON.stringify(transitionDraws), originalDraws);
+assert.equal(JSON.stringify(api.predictTransitionSet([...transitionDraws].reverse())), JSON.stringify(transition));
+assert.deepEqual(Array.from(api.predictTransitionSet([
+  ...transitionDraws, { round: 4, numbers: groupB, bonus: 45 },
+]).numbers), groupA);
+assert.equal(api.predictTransitionSet([]), null);
+assert.equal(api.predictTransitionSet([transitionDraws[0]]), null);
+assert.equal(api.predictTransitionSet([transitionDraws[0], transitionDraws[2]]), null);
+assert.equal(api.predictTransitionSet([...transitionDraws, transitionDraws[0]]), null);
+assert.equal(api.predictTransitionSet([transitionDraws[0], { round: 2, numbers: [0, 1, 2, 3, 4, 5], bonus: 45 }]), null);
+assert.equal(api.predictTransitionSet([{}, {}]), null);
+assert.equal(api.predictTransitionSet([...transitionDraws, { round: 5, numbers: groupB, bonus: 45 }]).transitions, 2);
+
+const drawData = JSON.parse(readFileSync(new URL("../lotto-data.json", import.meta.url), "utf8"));
+const liveTransition = api.predictTransitionSet(drawData.draws);
+assert.equal(liveTransition.targetRound, drawData.latestRound + 1);
+assert.equal(new Set(liveTransition.numbers).size, 6);
+assert.ok(liveTransition.numbers.every((number) => Number.isInteger(number) && number >= 1 && number <= 45));
+api.renderRecommendations({}, drawData);
+const independentPanel = panels.get("#recommendPanel").innerHTML;
+assert.match(independentPanel, /전체 1세트/);
+assert.match(independentPanel, new RegExp(`${liveTransition.targetRound}회 대상`));
+assert.equal((independentPanel.match(/class="recommendation-card"/g) || []).length, 1);
+assert.doesNotMatch(independentPanel, /NaN|undefined/);
+console.log(`Transition prediction for round ${liveTransition.targetRound}: ${liveTransition.numbers.join(", ")}`);
 
 const current = JSON.parse(readFileSync(new URL("../lstm-prediction.json", import.meta.url), "utf8"));
 data = structuredClone(current);
@@ -79,6 +116,9 @@ data = current;
 prediction = await api.loadLstmPrediction();
 assert.ok(prediction);
 api.setPrediction(prediction);
+api.renderRecommendations({}, drawData);
+assert.match(panels.get("#recommendPanel").innerHTML, new RegExp(`전체 ${prediction.recommendations.length + 1}세트`));
+assert.equal(JSON.stringify(api.predictTransitionSet(drawData.draws)), JSON.stringify(liveTransition));
 api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{ numbers: [1, 2, 3, 4, 5, 6] }] });
 assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /NaN|undefined/);
 assert.match(panels.get("#recommendPanel").innerHTML, /최대 겹침/);
