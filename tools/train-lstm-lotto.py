@@ -501,6 +501,11 @@ def chronological_split(sample_count: int) -> tuple[int, int]:
     return train_end, test_start
 
 
+def round_rng(target_round: int, offset: int) -> np.random.Generator:
+    """회차별 난수열. 고정 시드는 가중치가 비슷한 주마다 같은 조합을 반복한다."""
+    return np.random.default_rng(SEED + offset + target_round * 100)
+
+
 def selftest() -> int:
     """TF 없이 시간순 평가, 추천 중복, 이력 보존을 검증한다."""
     draws = [
@@ -528,6 +533,10 @@ def selftest() -> int:
     stats = stat_recommendations(draws, np.random.default_rng(SEED), forbidden=forbidden)
     assert stats == stat_recommendations(draws, np.random.default_rng(SEED), forbidden=forbidden)
     assert all(r["reason"]["endingNumbers"] == [] for r in stats)
+    # 빈도 가중치가 거의 같은 연속 두 주에도 같은 조합을 반복하지 않는다.
+    weekly = [{tuple(r["numbers"]) for r in stat_recommendations(draws[:n], round_rng(n + 1, 4))}
+              for n in (259, 260)]
+    assert not weekly[0] & weekly[1]
     samples = generate_weighted_sets(np.ones(NUM_RANGE), np.random.default_rng(SEED), 30)
     assert any(not matches_legacy_balance(c) for c in samples)
     forbidden.update(tuple(r["numbers"]) for r in stats)
@@ -702,9 +711,9 @@ def main() -> int:
     # 최신 회차도 마지막 입력에 포함해야 다음 회차를 예측한다.
     weights = predict_stateful(model, vectors[:, np.newaxis, :])[-1]
     historical = {tuple(d["numbers"]) for d in draws}
-    lstm = lstm_recommendations(weights, np.random.default_rng(SEED + 3), forbidden=historical)
+    lstm = lstm_recommendations(weights, round_rng(source_latest + 1, 3), forbidden=historical)
     selected = {tuple(rec["numbers"]) for rec in lstm}
-    stats = stat_recommendations(draws, np.random.default_rng(SEED + 4), forbidden=selected)
+    stats = stat_recommendations(draws, round_rng(source_latest + 1, 4), forbidden=selected)
     selected.update(tuple(rec["numbers"]) for rec in stats)
     backtest, backtest_recs = build_backtest_recommendations(draws, forbidden=selected)
     recommendations = lstm + stats + backtest_recs

@@ -52,6 +52,8 @@ assert.equal(api.predictTransitionSet([...transitionDraws, transitionDraws[0]]),
 assert.equal(api.predictTransitionSet([transitionDraws[0], { round: 2, numbers: [0, 1, 2, 3, 4, 5], bonus: 45 }]), null);
 assert.equal(api.predictTransitionSet([{}, {}]), null);
 assert.equal(api.predictTransitionSet([...transitionDraws, { round: 5, numbers: groupB, bonus: 45 }]).transitions, 2);
+assert.equal(transition.evaluation.testedRounds, 0);
+assert.equal(transition.evaluation.differenceCI95, null);
 
 const drawData = JSON.parse(readFileSync(new URL("../lotto-data.json", import.meta.url), "utf8"));
 const liveTransition = api.predictTransitionSet(drawData.draws);
@@ -64,6 +66,22 @@ assert.match(independentPanel, /전체 1세트/);
 assert.match(independentPanel, new RegExp(`${liveTransition.targetRound}회 대상`));
 assert.equal((independentPanel.match(/class="recommendation-card"/g) || []).length, 1);
 assert.doesNotMatch(independentPanel, /NaN|undefined/);
+assert.match(independentPanel, new RegExp(`평가 ${liveTransition.evaluation.testedRounds.toLocaleString()}회`));
+assert.match(independentPanel, /이론 대비 차이 95% 구간 -?\d\.\d{3} ~ -?\d\.\d{3}/);
+
+// 시간순 검증은 대상 회차를 뺀 이력으로 매번 다시 예측한 결과와 같아야 한다.
+const early = [...drawData.draws].sort((a, b) => a.round - b.round).slice(0, 260);
+const replayed = [];
+for (let index = 201; index < early.length; index++) {
+  const picked = api.predictTransitionSet(early.slice(0, index)).numbers;
+  replayed.push(picked.filter((number) => early[index].numbers.includes(number)).length);
+}
+const walkForward = api.predictTransitionSet(early).evaluation;
+assert.equal(walkForward.testedRounds, replayed.length);
+assert.equal(walkForward.meanMatches, replayed.reduce((a, b) => a + b, 0) / replayed.length);
+assert.equal(walkForward.threePlusRate, replayed.filter((count) => count >= 3).length / replayed.length);
+api.renderRecommendations({}, { draws: early.slice(0, 100) });
+assert.match(panels.get("#recommendPanel").innerHTML, /예측력은 검증되지 않았습니다/);
 console.log(`Transition prediction for round ${liveTransition.targetRound}: ${liveTransition.numbers.join(", ")}`);
 
 const current = JSON.parse(readFileSync(new URL("../lstm-prediction.json", import.meta.url), "utf8"));

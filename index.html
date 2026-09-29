@@ -1632,15 +1632,31 @@
         </details>`;
     }
 
+    const TRANSITION_WARMUP = 200;  // 전이 예측 채점 전에 쌓는 연속 회차 쌍
+
     function predictTransitionSet(draws) {
       if (draws.length < 2 || !draws.every((draw) => draw && isValidDraw(draw))
         || new Set(draws.map((draw) => draw.round)).size !== draws.length) return null;
       const history = [...draws].sort((a, b) => a.round - b.round);
       const counts = Array.from({ length: 46 }, () => Array(46).fill(0));
       const samples = Array(46).fill(0);
+      // 45 virtual transitions at the uniform 6/45 rate soften sparse observations.
+      // ponytail: one-step associations only; the walk-forward result below shows no edge, so longer sequences are not justified.
+      const pick = (latest) => Array.from({ length: 45 }, (_, index) => {
+        const number = index + 1;
+        const score = latest.numbers.reduce((sum, previous) =>
+          sum + (counts[previous][number] + 6) / (samples[previous] + 45), 0) / 6;
+        return { number, score };
+      }).sort((a, b) => b.score - a.score || a.number - b.number)
+        .slice(0, 6).map((item) => item.number).sort((a, b) => a - b);
       let transitions = 0;
+      const matches = [];
       for (let i = 1; i < history.length; i++) {
         if (history[i].round !== history[i - 1].round + 1) continue;
+        // 시간순 검증: 이 회차의 전이를 집계하기 전에 고른 번호만 채점한다.
+        if (transitions >= TRANSITION_WARMUP) {
+          matches.push(pick(history[i - 1]).filter((number) => history[i].numbers.includes(number)).length);
+        }
         transitions++;
         for (const previous of history[i - 1].numbers) {
           samples[previous]++;
@@ -1649,19 +1665,22 @@
       }
       if (!transitions) return null;
       const latest = history[history.length - 1];
-      // 45 virtual transitions at the uniform 6/45 rate soften sparse observations.
-      // ponytail: one-step associations only; compare on held-out draws before adding longer sequences.
-      const ranked = Array.from({ length: 45 }, (_, index) => {
-        const number = index + 1;
-        const score = latest.numbers.reduce((sum, previous) =>
-          sum + (counts[previous][number] + 6) / (samples[previous] + 45), 0) / 6;
-        return { number, score };
-      }).sort((a, b) => b.score - a.score || a.number - b.number);
+      const mean = matches.length ? sumNumbers(matches) / matches.length : null;
+      // ponytail: 회차 단위 정규근사 구간; 회차 의존성을 분석할 때 block bootstrap으로 교체.
+      const margin = matches.length < 2 ? null : 1.96 * Math.sqrt(
+        matches.reduce((total, count) => total + (count - mean) ** 2, 0) / (matches.length - 1) / matches.length);
       return {
         sourceLatestRound: latest.round,
         targetRound: latest.round + 1,
         transitions,
-        numbers: ranked.slice(0, 6).map((item) => item.number).sort((a, b) => a - b)
+        numbers: pick(latest),
+        evaluation: {
+          warmupTransitions: TRANSITION_WARMUP,
+          testedRounds: matches.length,
+          meanMatches: mean,
+          threePlusRate: matches.length ? matches.filter((count) => count >= 3).length / matches.length : null,
+          differenceCI95: margin === null ? null : [mean - 0.8 - margin, mean - 0.8 + margin]
+        }
       };
     }
 
@@ -1699,7 +1718,18 @@
               ${renderBalls(transition.numbers)}
               <p class="muted">${transition.sourceLatestRound}회까지 · 연속된 ${transition.transitions.toLocaleString()}쌍의 회차 분석</p>
               <p>직전 당첨번호 각각이 과거에 나온 뒤, 바로 다음 회차에 등장한 번호를 집계했습니다. 적은 표본을 보정한 전이 점수를 평균 내어 상위 6개를 선택합니다. 동점이면 작은 번호를 우선합니다.</p>
-              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험이며, 예측력은 검증되지 않았습니다. 성적표 자동 채점에는 포함되지 않습니다.</p>
+              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험입니다. 성적표 자동 채점에는 포함되지 않습니다.</p>
+              ${transition.evaluation.differenceCI95 ? `
+                <div class="stat-pills">
+                  <span class="stat-pill">시간순 검증 평균 적중 ${evaluationNumber(transition.evaluation.meanMatches)}개</span>
+                  <span class="stat-pill">이론 기대값 0.800개</span>
+                  <span class="stat-pill">3개 이상 일치 ${(transition.evaluation.threePlusRate * 100).toFixed(2)}%</span>
+                  <span class="stat-pill">이론 대비 차이 95% 구간 ${evaluationInterval(transition.evaluation.differenceCI95)}</span>
+                  <span class="stat-pill">${transition.evaluation.testedRounds >= 50 && transition.evaluation.differenceCI95[0] > 0
+                    ? "이 구간에서 양의 차이 관측" : "우위 미확인"}</span>
+                </div>
+                <p class="muted">각 회차를 직전 회차까지의 이력만으로 예측해 채점했습니다. 준비 구간 ${transition.evaluation.warmupTransitions}쌍 제외 · 평가 ${transition.evaluation.testedRounds.toLocaleString()}회. 구간은 회차 단위 정규근사이며 당첨 확률 상승을 뜻하지 않습니다.</p>`
+                : `<p class="muted">시간순 검증에 필요한 회차가 부족해 예측력은 검증되지 않았습니다.</p>`}
             </article>
           </div>` : `<p class="muted">전이 예측에는 유효한 연속 회차 이력이 필요합니다.</p>`}
         ${renderLstmRecommendations(lstmPrediction, data)}
@@ -1869,7 +1899,7 @@
             <p>전체 평균 대비 최근 흐름 배수: ${patterns.consecutive.trendRatio ? `${patterns.consecutive.trendRatio.toFixed(2)}배` : "비교 불가"}</p>
             <p>3연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.threePlus / data.draws.length : 0)}</p>
             <p>4연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.fourPlus / data.draws.length : 0)}</p>
-            <p class="muted">이번 회차 추정치는 전체 평균 대비 최근 5회 흐름 비율을 반영한 값입니다. 이론 확률이 아니라 과거 회차 비율 기반 추정치입니다.</p>
+            <p class="muted">이번 회차 추정치는 전체 평균 대비 최근 ${patterns.consecutive.recentLimit}회 흐름 비율을 반영한 값입니다. 이론 확률이 아니라 과거 회차 비율 기반 추정치입니다.</p>
           </div>
           <div class="metric">
             <h3>합계 구조</h3>
