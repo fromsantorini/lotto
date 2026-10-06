@@ -124,7 +124,6 @@ assert.doesNotMatch(comparison, /NaN|undefined|<img/);
 const backtest = api.renderBacktestRecommendations(prediction);
 assert.match(backtest, /이전 성적으로 방식을 선택한 뒤 다음 회차/);
 assert.match(backtest, /선택 전략 평균/);
-assert.match(backtest, /미래 당첨 성과를 보장하지 않습니다/);
 assert.doesNotMatch(backtest, /NaN|undefined/);
 data.comparison.testedRounds = 1;
 data.comparison.methods[2].differenceCI95 = [null, 0.03];
@@ -142,7 +141,18 @@ assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /NaN|undefined/);
 assert.match(panels.get("#recommendPanel").innerHTML, /최대 겹침/);
 const history = JSON.parse(readFileSync(new URL("../lstm-prediction-history.json", import.meta.url), "utf8"));
 api.renderLstmScoreboard(history.entries);
-assert.doesNotMatch(panels.get("#lstmScorePanel").innerHTML, /NaN|undefined/);
+assert.doesNotMatch(panels.get("#lstmScorePanel").innerHTML, /NaN|undefined|회차 전이 평균/);
+api.renderLstmScoreboard(history.entries, drawData.draws);
+const scoreboard = panels.get("#lstmScorePanel").innerHTML;
+assert.doesNotMatch(scoreboard, /NaN|undefined/);
+// 회차 전이 채점은 대상 회차 직전까지의 이력만으로 예측한 번호와 같아야 한다.
+const transitionScores = history.entries.filter((entry) => entry.result).map((entry) => {
+  const picked = api.predictTransitionSet(drawData.draws.filter((draw) => draw.round < entry.targetRound)).numbers;
+  return picked.filter((number) => entry.result.winningNumbers.includes(number)).length;
+});
+const transitionMean = (transitionScores.reduce((a, b) => a + b, 0) / transitionScores.length).toFixed(2);
+assert.match(scoreboard, new RegExp(`회차 전이 평균 ${transitionMean}개 · ${transitionScores.length}세트`));
+assert.match(api.renderMethodComparison(prediction), /^\s*<details[^>]*><summary>동일 조건 추천 비교<\/summary>/);
 assert.match(api.buildRecommendationReasonSummary({ method: "weighted-statistical-v2" }), /번호당 1/);
 
 // 기존 JSON과 상태유지 모델 JSON 모두 표시하며 누락/오염 점수는 숨긴다.

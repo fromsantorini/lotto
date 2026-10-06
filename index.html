@@ -1323,9 +1323,23 @@
       return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
     }
 
-    function renderLstmScoreboard(entries) {
+    function renderLstmScoreboard(entries, draws = []) {
       const panel = document.querySelector("#lstmScorePanel");
-      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
+      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches)).map((entry) => {
+        // 회차 전이는 결정적이므로 대상 회차 직전까지의 이력으로 다시 계산하면 당시 표시된 번호와 같다.
+        const transition = predictTransitionSet(draws.filter((draw) => draw?.round < entry.targetRound));
+        if (transition?.targetRound !== entry.targetRound) return entry;
+        const { winningNumbers, bonus } = entry.result;
+        return {
+          ...entry,
+          recommendations: [...entry.recommendations, { method: "round-transition", numbers: transition.numbers }],
+          result: { ...entry.result, matches: [...entry.result.matches, {
+            method: "round-transition",
+            matchCount: transition.numbers.filter((number) => winningNumbers.includes(number)).length,
+            bonusMatched: transition.numbers.includes(bonus)
+          }] }
+        };
+      });
       if (!scored.length) {
         panel.innerHTML = `
           <div class="section-head">
@@ -1351,8 +1365,7 @@
         <div class="section-head">
           <div>
             <h2>추천 성적표</h2>
-            <p class="muted">매주 CI가 생성한 기존 추천 5세트와 별도 백테스트 추천 5세트를 회차별로 누적하고 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다. 방식별 세트 수와 버전이 다르므로 아래 실전 누적값은 동일 조건 비교가 아닙니다.</p>
-          </div>
+            <p class="muted">매주 CI가 생성한 기존 추천 5세트와 별도 백테스트 추천 5세트를 회차별로 누적하고 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다. 방식별 세트 수와 버전이 다르므로 아래 실전 누적값은 동일 조건 비교가 아닙니다.</p>          </div>
         </div>
         <div class="stat-pills" style="margin-bottom:12px;">
           <span class="stat-pill">채점 완료 ${scored.length}회차 · ${allMatches.length}세트</span>
@@ -1486,6 +1499,7 @@
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
       if (method === "weighted-statistical-v2") return "통계 빈도 가중 v2";
       if (method === "walk-forward-backtest-v2") return "시간순 백테스트 선택 v2";
+      if (method === "round-transition") return "회차 전이";
       if (method === "lstm-combination-best") return "LSTM 최고 점수 조합";
       if (method === "lstm-combination-diverse") return "LSTM 다양성 조합";
       if (method === "balanced-statistical") return "통계 균형 조합";
@@ -1594,8 +1608,7 @@
               </div>
             </article>
           `).join("")}
-        </div>
-        <p class="warning" style="margin-top:12px;">과거 백테스트 결과이며 미래 당첨 성과를 보장하지 않습니다.</p>`;
+        </div>`;
     }
 
 
@@ -1605,7 +1618,7 @@
       const methods = comparison.methods.filter((row) =>
         ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2", "lstm-stateful-ball-weighted-v3"].includes(row?.method));
       return `
-        <h3 style="margin:20px 0 8px;">동일 조건 추천 비교</h3>
+        <details style="margin-top:20px;"><summary>동일 조건 추천 비교</summary>
         <p class="muted">학습·조정에 사용하지 않은 ${evaluationNumber(comparison.testStartRound, 0)}~${evaluationNumber(comparison.testEndRound, 0)}회,
           총 ${evaluationNumber(comparison.testedRounds, 0)}회 · 방식별 ${evaluationNumber(comparison.setsPerMethod, 0)}세트 · 난수 시드 ${evaluationNumber(comparison.seedCount, 0)}개.</p>
         <div class="table-wrap" tabindex="0" role="region" aria-label="추천 방식별 평가 성적">
@@ -1629,6 +1642,7 @@
         <details><summary>번호별 점수 진단</summary>
           <p class="muted">평가 AUC ${evaluationNumber(comparison.testAuc)} · Brier 오차 ${evaluationNumber(comparison.brierScore, 6)} · 균등 기준 ${evaluationNumber(comparison.uniformBrierScore, 6)}.
           Brier 오차는 작을수록 좋으며 AUC 0.5는 무작위 구분 수준입니다. 조합의 당첨 확률을 뜻하지 않습니다.</p>
+        </details>
         </details>`;
     }
 
@@ -1718,7 +1732,7 @@
               ${renderBalls(transition.numbers)}
               <p class="muted">${transition.sourceLatestRound}회까지 · 연속된 ${transition.transitions.toLocaleString()}쌍의 회차 분석</p>
               <p>직전 당첨번호 각각이 과거에 나온 뒤, 바로 다음 회차에 등장한 번호를 집계했습니다. 적은 표본을 보정한 전이 점수를 평균 내어 상위 6개를 선택합니다. 동점이면 작은 번호를 우선합니다.</p>
-              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험입니다. 성적표 자동 채점에는 포함되지 않습니다.</p>
+              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험입니다. 추첨 후 아래 성적표에서 자동 채점됩니다.</p>
               ${transition.evaluation.differenceCI95 ? `
                 <div class="stat-pills">
                   <span class="stat-pill">시간순 검증 평균 적중 ${evaluationNumber(transition.evaluation.meanMatches)}개</span>
@@ -2001,7 +2015,7 @@
       renderLatest(data);
       renderBriefing(data, state);
       renderRecommendations(state, data);
-      renderLstmScoreboard(lstmHistory);
+      renderLstmScoreboard(lstmHistory, data.draws);
       renderStats(data);
       renderFollowerStats(data);
       renderSignificancePanel(data);
