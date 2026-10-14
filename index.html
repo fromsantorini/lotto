@@ -370,6 +370,7 @@
     .inline-ball-list {
       display: flex;
       flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
       margin-top: 10px;
     }
@@ -840,6 +841,16 @@
         const repeatedLatestNumbers = topNextNumbers
           .filter((item) => latest.numbers.includes(item.number))
           .map((item) => item.number);
+        // 기준 회차가 최신 6개와 많이 겹칠수록 그 다음 회차 번호를 크게 반영한다.
+        const weightedScores = new Map();
+        matchedPairs.forEach(({ baseDraw, nextDraw }) => {
+          const weight = baseDraw.numbers.filter((item) => latest.numbers.includes(item)).length;
+          nextDraw.numbers.forEach((item) => weightedScores.set(item, (weightedScores.get(item) || 0) + weight));
+        });
+        const weightedTopNumbers = [...weightedScores]
+          .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+          .slice(0, 3)
+          .map(([item]) => item);
 
         return {
           number,
@@ -849,7 +860,8 @@
           nextDraws,
           stats,
           topNextNumbers,
-          repeatedLatestNumbers
+          repeatedLatestNumbers,
+          weightedTopNumbers
         };
       });
     }
@@ -1220,10 +1232,6 @@
       const hotNumbers = safeTopNumbers(stats.hotNumbers, 3);
       const coldNumbers = safeTopNumbers(stats.coldNumbers, 3);
       const sampleIsThin = stats.drawCount < 10;
-      const followerAnalyses = analyzeLatestNumberFollowers(data.draws)
-        .filter((analysis) => analysis.sampleCount >= 3)
-        .sort((a, b) => b.sampleCount - a.sampleCount || b.stats.averageSum - a.stats.averageSum);
-      const follower = followerAnalyses[0] || null;
 
       return {
         stats,
@@ -1250,28 +1258,7 @@
             warning: ""
           }
         ],
-        follower
-      };
-    }
-
-    function summarizeFollowerAnalysis(analysis) {
-      if (!analysis || analysis.sampleCount < 3) {
-        return {
-          description: "최신 번호 기반 다음 회차 표본이 아직 충분하지 않아 보조 카드로만 유지합니다.",
-          statPills: ["표본 부족"],
-          balls: []
-        };
-      }
-
-      const topNumbers = analysis.topNextNumbers.slice(0, 3).map((item) => item.number);
-      return {
-        description: `${analysis.number}번이 포함됐던 과거 회차의 다음 회차에서는 ${formatNumberList(topNumbers)}이 자주 뒤따랐습니다.`,
-        statPills: [
-          `표본 ${analysis.sampleCount}회`,
-          `평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}`,
-          `평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}`
-        ],
-        balls: topNumbers
+        followers: analyzeLatestNumberFollowers(data.draws)
       };
     }
 
@@ -1450,7 +1437,6 @@
       }
 
       const briefing = createBriefingModel(data, state);
-      const followerSummary = summarizeFollowerAnalysis(briefing.follower);
       panel.innerHTML = `
         <div class="section-head">
           <div>
@@ -1479,15 +1465,16 @@
           <article class="briefing-card support-card">
             <p class="briefing-kicker">Latest Follow-up</p>
             <h3>최신 번호 기반 보조 흐름</h3>
-            <p>${followerSummary.description}</p>
-            <div class="stat-pills">
-              ${followerSummary.statPills.map((item) => `<span class="stat-pill">${item}</span>`).join("")}
-            </div>
-            ${followerSummary.balls.length ? `
+            <p>최신 번호별로 과거 다음 회차에 자주 나온 번호입니다. 최신 6개와 많이 겹친 회차일수록 크게 반영했습니다.</p>
+            ${briefing.followers.map((analysis) => `
               <div class="inline-ball-list">
-                ${followerSummary.balls.map((number) => `<span class="ball ${getBallClass(number)}">${number}</span>`).join("")}
+                <span class="ball ${getBallClass(analysis.number)}">${analysis.number}</span>
+                <span>→</span>
+                ${analysis.sampleCount >= 3
+                  ? analysis.weightedTopNumbers.map((number) => `<span class="ball ${getBallClass(number)}">${number}</span>`).join("")
+                  : `<span class="stat-pill">표본 부족</span>`}
               </div>
-            ` : ""}
+            `).join("")}
           </article>
         </div>
       `;

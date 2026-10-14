@@ -10,6 +10,7 @@ let data;
 const api = runInNewContext(`${script}\n({ loadLstmPrediction, renderBacktestRecommendations,
   renderMethodComparison, renderLstmScoreboard, renderRecommendations,
   buildRecommendationReasonSummary, finiteNumber, predictTransitionSet,
+  analyzeLatestNumberFollowers, renderBriefing,
   setPrediction(value) { lstmPrediction = value; } })`, {
   localStorage: { getItem: () => null },
   document: {
@@ -55,7 +56,20 @@ assert.equal(api.predictTransitionSet([...transitionDraws, { round: 5, numbers: 
 assert.equal(transition.evaluation.testedRounds, 0);
 assert.equal(transition.evaluation.differenceCI95, null);
 
+// 최신 번호 보조 흐름: 최신 6개와 3개 겹친 회차(→20~25)가 1개씩 겹친 두 회차(→30 두 번)보다 크게 반영된다.
+const followerDraws = [
+  [1, 2, 3, 4, 5, 6], [30, 36, 37, 38, 39, 26], [1, 40, 41, 42, 43, 45],
+  [30, 31, 32, 33, 34, 35], [1, 40, 41, 42, 43, 44], [20, 21, 22, 23, 24, 25], [1, 2, 3, 40, 41, 42],
+].map((numbers, index) => ({ round: 7 - index, numbers, bonus: 45 }));
+const followerOne = api.analyzeLatestNumberFollowers(followerDraws)[0];
+assert.equal(followerOne.topNextNumbers[0].number, 30);
+assert.deepEqual(Array.from(followerOne.weightedTopNumbers), [20, 21, 22]);
+
 const drawData = JSON.parse(readFileSync(new URL("../lotto-data.json", import.meta.url), "utf8"));
+api.renderBriefing(drawData, { preferences: { statWindow: 100 } });
+const briefingPanel = panels.get("#briefingPanel").innerHTML;
+assert.equal((briefingPanel.match(/class="inline-ball-list"/g) || []).length, 6);
+assert.doesNotMatch(briefingPanel, /NaN|undefined|표본 부족/);
 const liveTransition = api.predictTransitionSet(drawData.draws);
 assert.equal(liveTransition.targetRound, drawData.latestRound + 1);
 assert.equal(new Set(liveTransition.numbers).size, 6);
