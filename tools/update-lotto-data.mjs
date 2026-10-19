@@ -184,8 +184,10 @@ async function fetchJson(url) {
   }
   try {
     return JSON.parse(body);
-  } catch (error) {
-    throw new Error(`official_result_json_parse_failed_${error.message}`);
+  } catch {
+    const title = stripTags(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
+    const text = stripTags(body.replace(/<(script|style|title)[\s\S]*?<\/\1>/gi, " ")).slice(0, 200);
+    throw new Error(`official_result_non_json status=${response.status} url=${response.url} title=${title} text=${text}`);
   }
 }
 
