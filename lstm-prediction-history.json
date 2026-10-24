@@ -2,6 +2,181 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "targetRound": 1248,
+      "sourceLatestRound": 1247,
+      "trainedAt": "2026-10-24T17:13:05Z",
+      "model": "keras-stateful-lstm-tykimos-v3",
+      "recommendations": [
+        {
+          "method": "lstm-stateful-ball-weighted-v3",
+          "numbers": [
+            6,
+            10,
+            13,
+            14,
+            15,
+            17
+          ]
+        },
+        {
+          "method": "lstm-stateful-ball-weighted-v3",
+          "numbers": [
+            6,
+            13,
+            17,
+            26,
+            36,
+            41
+          ]
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            5,
+            15,
+            17,
+            27,
+            37,
+            43
+          ],
+          "reason": {
+            "oddEven": "6:0",
+            "lowHigh": "3:3",
+            "sum": 144,
+            "frequentNumbers": [
+              15,
+              27
+            ],
+            "coldNumbers": [
+              5,
+              17,
+              43
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            7,
+            26,
+            28,
+            34,
+            37,
+            40
+          ],
+          "reason": {
+            "oddEven": "2:4",
+            "lowHigh": "1:5",
+            "sum": 172,
+            "frequentNumbers": [
+              28
+            ],
+            "coldNumbers": [
+              26,
+              34,
+              40
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            8,
+            16,
+            24,
+            27,
+            28,
+            35
+          ],
+          "reason": {
+            "oddEven": "2:4",
+            "lowHigh": "2:4",
+            "sum": 138,
+            "frequentNumbers": [
+              8,
+              16,
+              24,
+              27,
+              28
+            ],
+            "coldNumbers": [],
+            "carryOverNumbers": [
+              8
+            ],
+            "endingNumbers": [],
+            "consecutiveRuns": [
+              [
+                27,
+                28
+              ]
+            ]
+          }
+        },
+        {
+          "method": "walk-forward-backtest-v2",
+          "numbers": [
+            1,
+            8,
+            13,
+            18,
+            20,
+            30
+          ]
+        },
+        {
+          "method": "walk-forward-backtest-v2",
+          "numbers": [
+            2,
+            3,
+            14,
+            21,
+            30,
+            33
+          ]
+        },
+        {
+          "method": "walk-forward-backtest-v2",
+          "numbers": [
+            2,
+            15,
+            22,
+            23,
+            33,
+            37
+          ]
+        },
+        {
+          "method": "walk-forward-backtest-v2",
+          "numbers": [
+            11,
+            27,
+            28,
+            30,
+            35,
+            40
+          ]
+        },
+        {
+          "method": "walk-forward-backtest-v2",
+          "numbers": [
+            12,
+            20,
+            24,
+            29,
+            33,
+            45
+          ]
+        }
+      ],
+      "result": null
+    },
+    {
       "targetRound": 1247,
       "sourceLatestRound": 1246,
       "trainedAt": "2026-10-19T07:11:28Z",
@@ -168,7 +343,70 @@
           ]
         }
       ],
-      "result": null
+      "result": {
+        "date": "2026-10-24",
+        "winningNumbers": [
+          8,
+          14,
+          21,
+          22,
+          42,
+          45
+        ],
+        "bonus": 24,
+        "matches": [
+          {
+            "method": "lstm-stateful-ball-weighted-v3",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "lstm-stateful-ball-weighted-v3",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-v2",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-v2",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-v2",
+            "matchCount": 1,
+            "bonusMatched": false
+          }
+        ]
+      }
     },
     {
       "targetRound": 1246,

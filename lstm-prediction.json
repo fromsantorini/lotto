@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "model": "keras-stateful-lstm-tykimos-v3",
-  "sourceLatestRound": 1246,
-  "targetRound": 1247,
-  "trainedAt": "2026-10-19T07:11:28Z",
+  "sourceLatestRound": 1247,
+  "targetRound": 1248,
+  "trainedAt": "2026-10-24T17:13:05Z",
   "window": 1,
   "epochs": 100,
   "stateful": true,
@@ -12,120 +12,120 @@
   "referenceUrl": "https://tykimos.github.io/2020/01/25/keras_lstm_lotto_v895/",
   "sampling": "int(score * 100 + 1)",
   "numberScores": [
-    0.004531046841293573,
-    0.5220510363578796,
-    0.4585879147052765,
-    0.00042100061546079814,
-    4.3005292127418215e-07,
-    0.8053650259971619,
-    0.000480042741401121,
-    2.635011242091423e-06,
-    9.350990694656502e-06,
-    0.00027730612782761455,
-    8.904189598979428e-06,
-    0.06426401436328888,
-    0.997332751750946,
-    0.030383622273802757,
-    0.000375160452676937,
-    0.0033079455606639385,
-    0.004687178414314985,
-    0.0007089583086781204,
-    0.0471448116004467,
-    0.22618262469768524,
-    0.00037568292464129627,
-    0.000981403747573495,
-    0.0005758497281931341,
-    0.00017098034732043743,
-    0.0024037014227360487,
-    0.9983159303665161,
-    0.042058929800987244,
-    9.98043324216269e-05,
-    2.2139639099805208e-07,
-    7.723033377260435e-06,
-    0.20988373458385468,
-    3.428512718528509e-05,
-    0.0023708436638116837,
-    0.007540336810052395,
-    0.035560332238674164,
-    0.7936834692955017,
-    0.0003652813611552119,
-    7.825536886230111e-05,
-    0.00013933137233834714,
-    0.3504016697406769,
-    0.011568875052034855,
-    2.1581261933079077e-07,
-    3.222788507173391e-07,
-    0.00038144990685395896,
-    9.135781874647364e-05
+    0.0003387888427823782,
+    0.022931193932890892,
+    0.004102805629372597,
+    0.006219394039362669,
+    0.0069010211154818535,
+    0.3980139195919037,
+    0.005717115476727486,
+    0.051979318261146545,
+    0.0019298512488603592,
+    0.0017000780208036304,
+    4.529537420694396e-07,
+    0.007340974174439907,
+    0.8860874772071838,
+    0.09161068499088287,
+    0.07785142958164215,
+    0.027698135003447533,
+    0.9869369864463806,
+    4.156980139669031e-06,
+    1.0094233402924147e-05,
+    0.009585271589457989,
+    0.0035721943713724613,
+    0.020049020648002625,
+    1.6958028936642222e-06,
+    0.004447645042091608,
+    0.0003268823493272066,
+    0.021108785644173622,
+    0.011836912482976913,
+    0.017746012657880783,
+    7.171452307375148e-05,
+    1.7250858945772052e-05,
+    2.591983138700016e-05,
+    1.3374585883241252e-08,
+    3.252691840316402e-06,
+    0.00013134052278473973,
+    0.00010886877862503752,
+    0.07011373341083527,
+    0.0020563460420817137,
+    0.00045529898488894105,
+    0.00015146553050726652,
+    0.0005119442939758301,
+    0.07808434218168259,
+    0.00013366858183871955,
+    0.0015578053425997496,
+    0.011677463538944721,
+    0.00019475538283586502
   ],
   "ballCounts": [
     1,
-    53,
-    46,
-    1,
-    1,
-    81,
+    3,
     1,
     1,
     1,
+    40,
     1,
-    1,
-    7,
-    100,
-    4,
+    6,
     1,
     1,
     1,
     1,
-    5,
-    23,
+    89,
+    10,
+    8,
+    3,
+    99,
     1,
     1,
     1,
     1,
-    1,
-    100,
-    5,
+    3,
     1,
     1,
     1,
-    21,
-    1,
-    1,
-    1,
-    4,
-    80,
-    1,
-    1,
-    1,
-    36,
+    3,
+    2,
     2,
     1,
     1,
     1,
+    1,
+    1,
+    1,
+    1,
+    8,
+    1,
+    1,
+    1,
+    1,
+    8,
+    1,
+    1,
+    2,
     1
   ],
-  "trainSampleCount": 1245,
-  "validationAuc": 0.5065,
+  "trainSampleCount": 1246,
+  "validationAuc": 0.5052,
   "comparison": {
     "evaluationMode": "chronological-stateful-holdout-v3",
     "model": "keras-stateful-lstm-tykimos-v3",
-    "trainingThroughRound": 998,
-    "validationThroughRound": 1122,
-    "testStartRound": 1123,
-    "testEndRound": 1246,
+    "trainingThroughRound": 999,
+    "validationThroughRound": 1123,
+    "testStartRound": 1124,
+    "testEndRound": 1247,
     "testedRounds": 124,
     "setsPerMethod": 2,
     "seedCount": 3,
     "lstmRefitDuringTest": false,
-    "testAuc": 0.509,
-    "brierScore": 0.177033,
+    "testAuc": 0.4905,
+    "brierScore": 0.175861,
     "uniformBrierScore": 0.115556,
     "methods": [
       {
         "method": "uniform",
-        "meanMatches": 0.7836,
-        "threePlusRate": 0.0242,
+        "meanMatches": 0.7715,
+        "threePlusRate": 0.0215,
         "differenceVsRandom": 0.0,
         "differenceCI95": [
           0.0,
@@ -135,96 +135,98 @@
       },
       {
         "method": "weighted-statistical-v2",
-        "meanMatches": 0.7997,
-        "threePlusRate": 0.0269,
-        "differenceVsRandom": 0.0161,
+        "meanMatches": 0.7944,
+        "threePlusRate": 0.0255,
+        "differenceVsRandom": 0.0228,
         "differenceCI95": [
-          -0.0376,
-          0.0699
+          -0.0323,
+          0.0739
         ],
         "evidence": "not-established"
       },
       {
         "method": "lstm-stateful-ball-weighted-v3",
-        "meanMatches": 0.8669,
-        "threePlusRate": 0.0296,
-        "differenceVsRandom": 0.0833,
+        "meanMatches": 0.7513,
+        "threePlusRate": 0.0215,
+        "differenceVsRandom": -0.0202,
         "differenceCI95": [
-          -0.0323,
-          0.2084
+          -0.1371,
+          0.0981
         ],
         "evidence": "not-established"
       }
     ]
   },
   "backtest": {
-    "meanMatches": 0.805,
+    "meanMatches": 0.8046,
     "threePlusRate": 0.0242,
     "differenceVsRandom": 0.0007,
     "differenceCI95": [
-      -0.005,
-      0.0059
+      -0.0045,
+      0.0062
     ],
     "evidence": "not-established",
     "metric": "mean-matches-per-set",
     "evaluationMode": "prequential-selection-v2",
-    "testedRounds": 996,
-    "selectionRounds": 1046,
+    "testedRounds": 997,
+    "selectionRounds": 1047,
     "warmupRounds": 50,
     "seedCount": 3,
     "setsPerMethod": 5,
-    "randomBaseline": 0.8043,
+    "randomBaseline": 0.8039,
     "selectedMethod": "uniform",
     "selectedWindow": null,
     "selectedHalfLife": null
   },
   "diversity": {
-    "uniqueNumbers": 30,
-    "maxSharedNumbers": 4
+    "uniqueNumbers": 35,
+    "maxSharedNumbers": 3
   },
   "recommendations": [
     {
       "method": "lstm-stateful-ball-weighted-v3",
       "numbers": [
-        2,
-        3,
         6,
+        10,
         13,
-        26,
-        36
+        14,
+        15,
+        17
       ]
     },
     {
       "method": "lstm-stateful-ball-weighted-v3",
       "numbers": [
-        2,
         6,
         13,
-        20,
+        17,
+        26,
         36,
-        40
+        41
       ]
     },
     {
       "method": "weighted-statistical-v2",
       "numbers": [
-        1,
-        6,
-        11,
+        5,
         15,
-        36,
-        38
+        17,
+        27,
+        37,
+        43
       ],
       "reason": {
-        "oddEven": "3:3",
-        "lowHigh": "4:2",
-        "sum": 107,
+        "oddEven": "6:0",
+        "lowHigh": "3:3",
+        "sum": 144,
         "frequentNumbers": [
           15,
-          38
+          27
         ],
         "coldNumbers": [
-          11
+          5,
+          17,
+          43
         ],
         "carryOverNumbers": [],
         "endingNumbers": [],
@@ -234,23 +236,24 @@
     {
       "method": "weighted-statistical-v2",
       "numbers": [
-        3,
-        5,
-        9,
-        30,
-        35,
-        37
+        7,
+        26,
+        28,
+        34,
+        37,
+        40
       ],
       "reason": {
-        "oddEven": "5:1",
-        "lowHigh": "3:3",
-        "sum": 119,
+        "oddEven": "2:4",
+        "lowHigh": "1:5",
+        "sum": 172,
         "frequentNumbers": [
-          3,
-          9
+          28
         ],
         "coldNumbers": [
-          5
+          26,
+          34,
+          40
         ],
         "carryOverNumbers": [],
         "endingNumbers": [],
@@ -260,30 +263,33 @@
     {
       "method": "weighted-statistical-v2",
       "numbers": [
-        13,
-        15,
-        32,
-        33,
-        36,
-        44
+        8,
+        16,
+        24,
+        27,
+        28,
+        35
       ],
       "reason": {
-        "oddEven": "3:3",
+        "oddEven": "2:4",
         "lowHigh": "2:4",
-        "sum": 173,
+        "sum": 138,
         "frequentNumbers": [
-          13,
-          15
+          8,
+          16,
+          24,
+          27,
+          28
         ],
-        "coldNumbers": [
-          33
+        "coldNumbers": [],
+        "carryOverNumbers": [
+          8
         ],
-        "carryOverNumbers": [],
         "endingNumbers": [],
         "consecutiveRuns": [
           [
-            32,
-            33
+            27,
+            28
           ]
         ]
       }
@@ -292,31 +298,42 @@
       "method": "walk-forward-backtest-v2",
       "numbers": [
         1,
-        5,
-        7,
-        34,
-        40,
-        45
+        8,
+        13,
+        18,
+        20,
+        30
       ]
     },
     {
       "method": "walk-forward-backtest-v2",
       "numbers": [
+        2,
         3,
-        10,
-        32,
-        36,
-        44,
-        45
+        14,
+        21,
+        30,
+        33
       ]
     },
     {
       "method": "walk-forward-backtest-v2",
       "numbers": [
-        7,
-        10,
-        16,
-        19,
+        2,
+        15,
+        22,
+        23,
+        33,
+        37
+      ]
+    },
+    {
+      "method": "walk-forward-backtest-v2",
+      "numbers": [
+        11,
+        27,
+        28,
+        30,
         35,
         40
       ]
@@ -324,23 +341,12 @@
     {
       "method": "walk-forward-backtest-v2",
       "numbers": [
-        10,
-        13,
-        19,
-        23,
-        29,
-        41
-      ]
-    },
-    {
-      "method": "walk-forward-backtest-v2",
-      "numbers": [
-        15,
+        12,
         20,
-        21,
-        26,
-        32,
-        44
+        24,
+        29,
+        33,
+        45
       ]
     }
   ],
