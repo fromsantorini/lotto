@@ -155,14 +155,18 @@ assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /NaN|undefined/);
 assert.match(panels.get("#recommendPanel").innerHTML, /최대 겹침/);
 const history = JSON.parse(readFileSync(new URL("../lstm-prediction-history.json", import.meta.url), "utf8"));
 api.renderLstmScoreboard(history.entries);
-assert.doesNotMatch(panels.get("#lstmScorePanel").innerHTML, /NaN|undefined|회차 전이 평균/);
-api.renderLstmScoreboard(history.entries, drawData.draws);
 const scoreboard = panels.get("#lstmScorePanel").innerHTML;
 assert.doesNotMatch(scoreboard, /NaN|undefined/);
-// 회차 전이 채점은 대상 회차 직전까지의 이력만으로 예측한 번호와 같아야 한다.
+// 회차 전이는 이력에 고정된 번호로 채점하고, 다음 회차 기록은 화면의 예측과 같아야 한다.
+const isTransition = (item) => item.method === "round-transition";
+const pendingTransition = history.entries.find((entry) => entry.targetRound === liveTransition.targetRound);
+assert.deepEqual(pendingTransition.recommendations.find(isTransition).numbers, Array.from(liveTransition.numbers));
 const transitionScores = history.entries.filter((entry) => entry.result).map((entry) => {
-  const picked = api.predictTransitionSet(drawData.draws.filter((draw) => draw.round < entry.targetRound)).numbers;
-  return picked.filter((number) => entry.result.winningNumbers.includes(number)).length;
+  const index = entry.recommendations.findIndex(isTransition);
+  assert.ok(isTransition(entry.result.matches[index]), `round ${entry.targetRound} transition missing`);
+  assert.equal(entry.result.matches[index].matchCount,
+    entry.recommendations[index].numbers.filter((number) => entry.result.winningNumbers.includes(number)).length);
+  return entry.result.matches[index].matchCount;
 });
 const transitionMean = (transitionScores.reduce((a, b) => a + b, 0) / transitionScores.length).toFixed(2);
 assert.match(scoreboard, new RegExp(`회차 전이 평균 ${transitionMean}개 · ${transitionScores.length}세트`));

@@ -181,6 +181,17 @@
             36,
             37
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            15,
+            19,
+            20,
+            21,
+            34,
+            43
+          ]
         }
       ],
       "result": null
@@ -361,6 +372,17 @@
             38,
             45
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            13,
+            18,
+            27,
+            34,
+            39,
+            45
+          ]
         }
       ],
       "result": {
@@ -424,6 +446,11 @@
             "method": "walk-forward-backtest-v2",
             "matchCount": 1,
             "bonusMatched": true
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
+            "bonusMatched": false
           }
         ]
       }
@@ -599,6 +626,17 @@
             33,
             45
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            12,
+            13,
+            15,
+            34,
+            36,
+            45
+          ]
         }
       ],
       "result": {
@@ -661,6 +699,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -831,6 +874,17 @@
             32,
             44
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            3,
+            6,
+            13,
+            27,
+            33,
+            37
+          ]
         }
       ],
       "result": {
@@ -893,6 +947,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 0,
             "bonusMatched": false
           }
         ]
@@ -1090,6 +1149,17 @@
             35,
             42
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            11,
+            14,
+            17,
+            20,
+            27,
+            34
+          ]
         }
       ],
       "result": {
@@ -1152,6 +1222,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -1320,6 +1395,17 @@
             27,
             43
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            18,
+            27,
+            34,
+            38,
+            39,
+            45
+          ]
         }
       ],
       "result": {
@@ -1381,6 +1467,11 @@
           },
           {
             "method": "walk-forward-backtest-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
             "matchCount": 0,
             "bonusMatched": false
           }
@@ -1556,6 +1647,17 @@
             31,
             40
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            13,
+            18,
+            27,
+            33,
+            34,
+            37
+          ]
         }
       ],
       "result": {
@@ -1618,6 +1720,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 3,
             "bonusMatched": false
           }
         ]
@@ -1807,6 +1914,17 @@
             34,
             41
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            1,
+            12,
+            15,
+            24,
+            34,
+            44
+          ]
         }
       ],
       "result": {
@@ -1868,6 +1986,11 @@
           },
           {
             "method": "walk-forward-backtest-v2",
+            "matchCount": 2,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
             "matchCount": 2,
             "bonusMatched": false
           }
@@ -2059,6 +2182,17 @@
             34,
             37
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            12,
+            13,
+            27,
+            31,
+            33,
+            37
+          ]
         }
       ],
       "result": {
@@ -2121,6 +2255,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -2301,6 +2440,17 @@
             29,
             34
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            12,
+            13,
+            14,
+            33,
+            34,
+            40
+          ]
         }
       ],
       "result": {
@@ -2363,6 +2513,11 @@
           {
             "method": "walk-forward-backtest-v2",
             "matchCount": 3,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -2560,6 +2715,17 @@
             33,
             38
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            13,
+            14,
+            19,
+            20,
+            21,
+            45
+          ]
         }
       ],
       "result": {
@@ -2622,6 +2788,11 @@
           {
             "method": "walk-forward-backtest",
             "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 3,
             "bonusMatched": false
           }
         ]
@@ -2812,6 +2983,17 @@
             41,
             42
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            14,
+            21,
+            27,
+            33,
+            34,
+            39
+          ]
         }
       ],
       "result": {
@@ -2874,6 +3056,11 @@
           {
             "method": "walk-forward-backtest",
             "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -3060,6 +3247,17 @@
             32,
             45
           ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            1,
+            12,
+            17,
+            31,
+            34,
+            45
+          ]
         }
       ],
       "result": {
@@ -3122,6 +3320,11 @@
           {
             "method": "walk-forward-backtest",
             "matchCount": 2,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 0,
             "bonusMatched": false
           }
         ]
@@ -3267,6 +3470,17 @@
               ]
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            3,
+            14,
+            18,
+            27,
+            38,
+            39
+          ]
         }
       ],
       "result": {
@@ -3304,6 +3518,11 @@
           {
             "method": "weighted-statistical",
             "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 0,
             "bonusMatched": false
           }
         ]
@@ -3409,6 +3628,17 @@
               22
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            3,
+            13,
+            16,
+            34,
+            40,
+            43
+          ]
         }
       ],
       "result": {
@@ -3446,6 +3676,11 @@
           {
             "method": "balanced-statistical",
             "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
             "bonusMatched": false
           }
         ]
@@ -3551,6 +3786,17 @@
               22
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            12,
+            34,
+            37,
+            38,
+            44,
+            45
+          ]
         }
       ],
       "result": {
@@ -3587,6 +3833,11 @@
           },
           {
             "method": "balanced-statistical",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
             "matchCount": 0,
             "bonusMatched": false
           }
@@ -3693,6 +3944,17 @@
               23
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            10,
+            27,
+            33,
+            37,
+            40,
+            43
+          ]
         }
       ],
       "result": {
@@ -3731,6 +3993,11 @@
             "method": "balanced-statistical",
             "matchCount": 0,
             "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 1,
+            "bonusMatched": true
           }
         ]
       }
@@ -3833,6 +4100,17 @@
               32
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            3,
+            12,
+            13,
+            33,
+            34,
+            45
+          ]
         }
       ],
       "result": {
@@ -3870,6 +4148,11 @@
           {
             "method": "balanced-statistical",
             "matchCount": 2,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 0,
             "bonusMatched": false
           }
         ]
@@ -3973,6 +4256,17 @@
               14
             ]
           }
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            18,
+            24,
+            26,
+            27,
+            31,
+            45
+          ]
         }
       ],
       "result": {
@@ -4009,6 +4303,11 @@
           },
           {
             "method": "balanced-statistical",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
             "matchCount": 1,
             "bonusMatched": false
           }

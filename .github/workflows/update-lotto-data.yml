@@ -53,6 +53,7 @@ jobs:
           python tools/train-lstm-lotto.py --selftest
           python tools/train-lstm-lotto.py --model-selftest
           python tools/train-lstm-lotto.py
+          node tools/record-transition.mjs
           node tools/test-backtest-render.mjs
 
       - name: Commit updated data and prediction

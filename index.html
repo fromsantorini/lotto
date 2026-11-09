@@ -1310,23 +1310,9 @@
       return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
     }
 
-    function renderLstmScoreboard(entries, draws = []) {
+    function renderLstmScoreboard(entries) {
       const panel = document.querySelector("#lstmScorePanel");
-      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches)).map((entry) => {
-        // 회차 전이는 결정적이므로 대상 회차 직전까지의 이력으로 다시 계산하면 당시 표시된 번호와 같다.
-        const transition = predictTransitionSet(draws.filter((draw) => draw?.round < entry.targetRound));
-        if (transition?.targetRound !== entry.targetRound) return entry;
-        const { winningNumbers, bonus } = entry.result;
-        return {
-          ...entry,
-          recommendations: [...entry.recommendations, { method: "round-transition", numbers: transition.numbers }],
-          result: { ...entry.result, matches: [...entry.result.matches, {
-            method: "round-transition",
-            matchCount: transition.numbers.filter((number) => winningNumbers.includes(number)).length,
-            bonusMatched: transition.numbers.includes(bonus)
-          }] }
-        };
-      });
+      const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
       if (!scored.length) {
         panel.innerHTML = `
           <div class="section-head">
@@ -2002,7 +1988,7 @@
       renderLatest(data);
       renderBriefing(data, state);
       renderRecommendations(state, data);
-      renderLstmScoreboard(lstmHistory, data.draws);
+      renderLstmScoreboard(lstmHistory);
       renderStats(data);
       renderFollowerStats(data);
       renderSignificancePanel(data);
