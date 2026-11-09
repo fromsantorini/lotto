@@ -6,32 +6,32 @@
   <title>로또 번호 분석</title>
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f6f7f9;
-      --surface: #ffffff;
-      --text: #17191f;
-      --muted: #667085;
-      --line: #d9dee8;
-      --blue: #1f6feb;
-      --green: #168a53;
-      --red: #d1242f;
-      --yellow: #f2b705;
-      --ink-soft: #303642;
+      color-scheme: dark;
+      --bg: #0f1424;
+      --surface: #1a2138;
+      --raised: #313b5f;
+      --text: #eef1f8;
+      --muted: #9aa5bf;
+      --line: rgba(255, 255, 255, .08);
+      --gold: #f5c451;
+      --danger: #ff9a9a;
+      --ball-size: 36px;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
+      font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+      background: radial-gradient(1000px 420px at 50% -120px, rgba(245, 196, 81, .10), transparent 70%) no-repeat, var(--bg);
       color: var(--text);
+      font-variant-numeric: tabular-nums;
     }
 
     .app-shell {
       width: min(1180px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 24px 0 48px;
+      padding: 28px 0 56px;
     }
 
     .topbar {
@@ -39,439 +39,374 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 16px;
+      flex-wrap: wrap;
     }
 
-    .eyebrow {
-      margin: 0 0 4px;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(28px, 4vw, 44px);
-      line-height: 1.1;
-      letter-spacing: 0;
-    }
-
-    h2 {
-      margin: 0 0 12px;
-      font-size: 20px;
-      letter-spacing: 0;
-    }
-
-    h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-      letter-spacing: 0;
-    }
-
-    p { line-height: 1.55; }
-
-    .panel, .status-panel {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 18px;
-      margin-top: 14px;
-    }
-
-    .status-panel strong { display: block; margin-bottom: 6px; }
-    .status-panel p { margin: 4px 0; color: var(--muted); }
-
-    .view-tabs {
+    .topbar-side {
       display: flex;
-      gap: 8px;
-      margin-top: 16px;
-      overflow-x: auto;
-      padding-bottom: 2px;
-      touch-action: manipulation;
+      align-items: center;
+      gap: 12px;
     }
 
-    button, input, select {
-      font: inherit;
-    }
+    h1 { margin: 0; font-size: clamp(24px, 3.4vw, 34px); line-height: 1.15; }
+    h2 { margin: 0; font-size: 20px; }
+    h3 { margin: 0 0 12px; font-size: 15px; }
+
+    .muted, .status-panel { color: var(--muted); font-size: 14px; }
+    .status-panel.error { color: var(--danger); }
+
+    button, input, select { font: inherit; }
 
     button {
-      border: 0;
-      border-radius: 8px;
-      background: var(--blue);
-      color: white;
-      padding: 10px 14px;
-      cursor: pointer;
       min-height: 40px;
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--raised);
+      color: var(--text);
+      cursor: pointer;
       white-space: nowrap;
     }
 
-    button:disabled {
-      opacity: .55;
-      cursor: wait;
+    button:disabled { opacity: .55; cursor: wait; }
+    :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+    .view-tabs {
+      display: flex;
+      gap: 4px;
+      margin-top: 18px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      touch-action: manipulation;
     }
 
     .tab-button {
-      background: #e9edf5;
-      color: var(--text);
       flex: 0 0 auto;
+      min-height: 44px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      background: none;
+      color: var(--muted);
+      font-weight: 600;
     }
 
-    .tab-button.active {
-      background: var(--blue);
-      color: white;
-    }
+    .tab-button.active { border-bottom-color: var(--gold); color: var(--gold); }
 
     .view { display: none; }
     .view.active { display: block; }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 12px;
-    }
-
-    .metric {
+    .panel {
+      margin-top: 16px;
+      padding: 22px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      min-width: 0;
+      border-radius: 16px;
+      background: var(--surface);
     }
 
-    .metric-value {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 800;
-    }
+    .panel:empty { display: none; }
 
-    .muted {
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .warning {
-      color: #7a4a00;
-      background: #fff7df;
-      border: 1px solid #f2d782;
-      border-radius: 8px;
-      padding: 10px 12px;
-    }
-
-    .error {
-      color: #8f111b;
-      background: #fff0f1;
-      border: 1px solid #f1b9be;
-      border-radius: 8px;
-      padding: 10px 12px;
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
     }
 
     .balls {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
       align-items: center;
+      gap: 6px;
     }
 
     .ball {
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      color: white;
       flex: 0 0 auto;
-    }
-
-    .ball.n1 { background: #f2b705; color: #1f2328; }
-    .ball.n2 { background: #218bff; }
-    .ball.n3 { background: #d1242f; }
-    .ball.n4 { background: #6e7781; }
-    .ball.n5 { background: #168a53; }
-    .ball.hit {
-      outline: 4px solid #ff2d95;
-      box-shadow: 0 0 0 2px #fff, 0 0 14px #ff2d95;
-    }
-    .ball.bonus-hit {
-      outline: 4px solid #8250df;
-      box-shadow: 0 0 0 2px #fff, 0 0 14px #8250df;
-    }
-
-    .recommendation-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 12px;
-    }
-
-    .recommendation-card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-    }
-
-    .history-batch-list {
-      display: grid;
-      gap: 12px;
-      margin-top: 12px;
-    }
-
-    .history-batch {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 14px;
-      background: #fcfdff;
-    }
-
-    .history-batch-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
-    }
-
-    .history-batch-head p {
-      margin: 4px 0 0;
-    }
-
-    .briefing-panel {
-      background:
-        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-    }
-
-    .briefing-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-    }
-
-    .briefing-card {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 16px;
-      background: #fff;
-      min-width: 0;
-    }
-
-    .briefing-kicker {
-      margin: 0 0 8px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .briefing-card h3 {
-      margin-bottom: 10px;
-    }
-
-    .briefing-card p {
-      margin: 0;
-    }
-
-    .briefing-numbers {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .briefing-number {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 42px;
-      height: 42px;
-      padding: 0 12px;
-      border-radius: 999px;
+      width: var(--ball-size);
+      height: var(--ball-size);
+      border-radius: 50%;
+      background: radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 46%), var(--ball-color);
+      box-shadow: inset -2px -3px 6px rgba(0, 0, 0, .25), 0 3px 8px rgba(0, 0, 0, .35);
+      color: #fff;
+      font-size: calc(var(--ball-size) * .4);
       font-weight: 800;
-      color: white;
     }
 
-    .briefing-card.support-card {
-      background: #fcfdff;
-    }
+    .n1 { --ball-color: #f5b921; color: #1b1f2a; }
+    .n2 { --ball-color: #2f7fea; }
+    .n3 { --ball-color: #df4249; }
+    .n4 { --ball-color: #6d7789; }
+    .n5 { --ball-color: #21935b; }
 
-    .section-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
+    .ball-plus { color: var(--muted); font-size: 18px; font-weight: 700; }
 
-    .ghost-button {
-      background: #eef4ff;
-      color: var(--blue);
-    }
+    .ball.hit { outline: 2px solid var(--gold); outline-offset: 1px; box-shadow: 0 0 14px rgba(245, 196, 81, .7); }
+    .ball.bonus-hit { outline: 2px solid #b79cff; outline-offset: 1px; box-shadow: 0 0 14px rgba(183, 156, 255, .7); }
+    .balls.scored .ball:not(.hit):not(.bonus-hit) { opacity: .32; box-shadow: none; }
 
     .hero-panel {
-      background:
-        radial-gradient(circle at top left, rgba(31, 111, 235, 0.12), transparent 38%),
-        linear-gradient(135deg, #ffffff 0%, #f3f7ff 100%);
+      --ball-size: clamp(34px, 9.4vw, 62px);
+      background: linear-gradient(135deg, #27315a 0%, var(--surface) 70%);
     }
 
-    .section-head {
+    .hero-panel .ball {
+      box-shadow: inset -3px -4px 8px rgba(0, 0, 0, .25), 0 0 22px color-mix(in srgb, var(--ball-color) 55%, transparent);
+    }
+
+    .hero-stats {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 32px;
+      margin-top: 20px;
     }
 
-    .section-head p {
-      margin: 4px 0 0;
-    }
+    .hero-stats span { display: block; color: var(--muted); font-size: 13px; }
+    .hero-stats strong { font-size: 22px; color: var(--gold); }
 
-    .latest-follow-grid {
+    .briefing-grid, .latest-follow-grid, .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
     }
 
-    .latest-follow-card {
-      border: 1px solid var(--line);
+    .grid + .grid { margin-top: 12px; }
+
+    .briefing-card, .latest-follow-card, .metric {
+      min-width: 0;
+      padding: 16px;
       border-radius: 12px;
-      padding: 14px;
-      background: #fcfdff;
+      background: rgba(255, 255, 255, .04);
     }
 
-    .ball-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      border-radius: 999px;
-      font-weight: 800;
-      color: #fff;
-      margin-bottom: 10px;
-    }
+    .briefing-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .follow-card { grid-column: 1 / -1; }
 
-    .stat-pills {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 10px 0 0;
-    }
-
-    .stat-pill {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 13px;
-      color: var(--ink-soft);
-      background: #fff;
+    .follow-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 10px 18px;
     }
 
     .inline-ball-list {
+      --ball-size: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+    }
+
+    .follow-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .follow-head h3 { margin: 0; flex: 1; }
+
+    .stat-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .latest-follow-card .stat-pills { margin-top: 12px; }
+
+    .stat-pill {
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--raised);
+      color: #cdd5e7;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .stat-pill.warn { color: var(--gold); }
+
+    .rec-group {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      padding: 14px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .rec-group:first-child { padding-top: 0; border-top: 0; }
+
+    .rec-group h3 {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
-      margin-top: 10px;
+      margin: 0;
+      min-height: 36px;
+      color: var(--gold);
     }
 
-    .inline-ball-list .ball {
-      width: 32px;
-      height: 32px;
-      font-size: 13px;
+    .rec-sets {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 10px 18px;
     }
 
-    .form-row {
+    details > summary { cursor: pointer; }
+
+    .fold { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .fold > summary { color: var(--muted); font-size: 14px; }
+    .fold h3 { margin: 18px 0 8px; color: var(--muted); font-size: 13px; }
+    .fold details { margin-top: 10px; }
+    .fold details > summary { color: var(--muted); font-size: 13px; }
+    .fold .table-wrap { margin-top: 10px; }
+
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .score-tile {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 2px;
+      padding: 16px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .score-tile span, .score-tile small { color: var(--muted); font-size: 13px; }
+    .score-tile strong { color: var(--gold); font-size: 30px; line-height: 1.2; }
+
+    .history-batch-list { display: grid; gap: 8px; margin-top: 18px; }
+
+    .history-batch {
+      --ball-size: 28px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .history-batch > summary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
       flex-wrap: wrap;
-      align-items: center;
+      padding: 12px 14px;
+      list-style: none;
     }
 
-    input, select {
-      min-height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px 10px;
-      background: white;
-      color: var(--text);
-    }
+    .history-batch > summary::-webkit-details-marker { display: none; }
+    .batch-round { font-weight: 700; }
+    .batch-best { margin-left: auto; }
 
-    input[type="search"], input[type="text"] {
-      width: min(100%, 280px);
-    }
+    .score-rows { padding: 0 14px 12px; }
 
-    .table-wrap {
-      overflow: auto;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 720px;
-      background: white;
-    }
-
-    th, td {
-      border-bottom: 1px solid var(--line);
-      padding: 10px;
-      text-align: left;
-      vertical-align: middle;
-    }
-
-    th {
-      color: var(--muted);
-      font-size: 13px;
-      background: #fafbfc;
-    }
-
-    tr:last-child td { border-bottom: 0; }
-
-    .mini-bars {
+    .score-row {
       display: grid;
-      gap: 8px;
+      grid-template-columns: minmax(84px, 150px) 1fr auto;
+      align-items: center;
+      gap: 12px;
+      padding: 7px 0;
+      border-top: 1px solid var(--line);
     }
 
-    .mini-bar {
-      display: grid;
-      grid-template-columns: 64px 1fr 84px;
-      gap: 8px;
-      align-items: center;
+    .rec-label { color: var(--muted); font-size: 13px; }
+    .hit-count { color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .hit-count.won { color: var(--gold); font-weight: 700; }
+
+    .metric-value { margin: 0; color: var(--gold); font-size: 26px; font-weight: 800; }
+    .metric-value + .muted { margin: 2px 0 0; }
+
+    .kv { margin: 0; }
+
+    .kv div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 0;
+      border-top: 1px solid var(--line);
       font-size: 14px;
     }
 
+    .kv div:first-child { border-top: 0; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; font-weight: 600; text-align: right; }
+    .kv + .balls, .kv + .mini-bars, .mini-bars + .stat-pills { margin-top: 12px; }
+
+    .mini-bars { display: grid; gap: 8px; }
+
+    .mini-bar {
+      display: grid;
+      grid-template-columns: 48px minmax(24px, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .mini-bar span:last-child { color: var(--muted); }
+
     .bar-track {
-      height: 8px;
-      border-radius: 999px;
-      background: #e9edf5;
+      height: 6px;
       overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
     }
 
     .bar-fill {
       height: 100%;
       border-radius: 999px;
-      background: var(--blue);
+      background: linear-gradient(90deg, #c8922b, var(--gold));
     }
 
+    .form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+    input, select {
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--raised);
+      color: var(--text);
+    }
+
+    input[type="search"] { width: min(100%, 280px); }
+
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+
+    table { width: 100%; min-width: 640px; border-collapse: collapse; }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th { color: var(--muted); font-size: 13px; font-weight: 600; }
+    tr:last-child td, tr:last-child th { border-bottom: 0; }
+    #historyPanel { --ball-size: 30px; }
+    #historyPanel h2 { margin-bottom: 14px; }
+
     @media (max-width: 640px) {
-      .topbar { align-items: flex-start; flex-direction: column; }
-      .app-shell { width: min(100% - 20px, 1180px); }
-      .mini-bar { grid-template-columns: 52px 1fr; }
-      .mini-bar span:last-child { grid-column: 1 / -1; color: var(--muted); }
-      table { min-width: 660px; }
+      .app-shell { width: calc(100% - 32px); padding-top: 20px; }
+      .panel { padding: 18px; }
+      .briefing-grid { grid-template-columns: 1fr; }
+      .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .rec-group { grid-template-columns: 1fr; gap: 8px; }
+      .rec-group h3 { min-height: 0; }
+      .rec-sets { grid-template-columns: 1fr; }
+      .score-row { grid-template-columns: 1fr auto; }
+      .score-row .balls { grid-column: 1 / -1; grid-row: 2; }
+      table { min-width: 600px; }
     }
   </style>
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Lotto 6/45 Dashboard</p>
-        <h1>로또 번호 분석</h1>
+      <h1>로또 번호 분석</h1>
+      <div class="topbar-side">
+        <span id="statusPanel" class="status-panel" role="status"></span>
+        <button id="refreshButton" type="button">새로고침</button>
       </div>
-      <button id="refreshButton" type="button">데이터 다시 읽기</button>
     </header>
 
     <nav class="view-tabs" aria-label="화면 선택">
@@ -479,8 +414,6 @@
       <button class="tab-button" type="button" data-view="stats">통계</button>
       <button class="tab-button" type="button" data-view="history">역대 당첨번호</button>
     </nav>
-
-    <section id="statusPanel" class="status-panel"></section>
 
     <div id="dashboardView" class="view active">
       <section id="latestPanel" class="panel hero-panel"></section>
@@ -524,10 +457,7 @@
       latestRound: 0,
       draws: []
     };
-    let currentLoadStatus = {
-      title: "데이터 준비",
-      message: "lotto-data.json을 불러오는 중입니다."
-    };
+    let currentLoadStatus = { title: "데이터 준비" };
     let lstmPrediction = null;
     let lstmHistory = [];
 
@@ -629,8 +559,6 @@
           .map((rec) => ({
             method: String(rec.method || "lstm"),
             numbers: Array.isArray(rec.numbers) ? rec.numbers.map(Number) : [],
-            reason: rec.reason && typeof rec.reason === "object" ? rec.reason : null,
-            modelScore: finiteNumber(rec.modelScore)
           }))
           .filter((rec) =>
             rec.numbers.length === 6
@@ -646,22 +574,16 @@
           sourceLatestRound: Number(data.sourceLatestRound || 0),
           targetRound: Number(data.targetRound || 0),
           trainedAt: data.trainedAt || null,
-          window: Number(data.window || 0),
           stateful: data.stateful === true,
           epochs: finiteNumber(data.epochs),
           numberScores: Array.isArray(data.numberScores) && data.numberScores.length === 45
             && data.numberScores.every((score) => finiteNumber(score) !== null && score >= 0 && score <= 1)
             ? data.numberScores : null,
-          validationAuc: finiteNumber(data.validationAuc),
-          candidateCount: Number.isInteger(Number(data.candidateCount)) ? Number(data.candidateCount) : 0,
           recommendations,
           comparison: ["chronological-holdout-v2", "chronological-stateful-holdout-v3"].includes(data.comparison?.evaluationMode)
             && Array.isArray(data.comparison.methods) ? data.comparison : null,
           backtest: data.backtest && typeof data.backtest === "object" ? {
             metric: String(data.backtest.metric || ""),
-            evaluationMode: String(data.backtest.evaluationMode || ""),
-            seedCount: finiteNumber(data.backtest.seedCount),
-            warmupRounds: finiteNumber(data.backtest.warmupRounds),
             threePlusRate: finiteNumber(data.backtest.threePlusRate),
             differenceCI95: data.backtest.differenceCI95,
             testedRounds: Number(data.backtest.testedRounds || 0),
@@ -672,8 +594,7 @@
               ? null : Number(data.backtest.selectedHalfLife),
             meanMatches: finiteNumber(data.backtest.meanMatches),
             randomBaseline: finiteNumber(data.backtest.randomBaseline)
-          } : null,
-          warning: String(data.warning || "")
+          } : null
         };
       } catch (error) {
         console.warn("lstm_prediction_load_failed", error);
@@ -1199,8 +1120,9 @@
           : number === highlights?.bonus ? " bonus-hit" : "";
         return `<span class="ball ${getBallClass(number)}${highlightClass}">${number}</span>`;
       }).join("");
-      if (!bonus) return `<div class="balls">${mainBalls}</div>`;
-      return `<div class="balls">${mainBalls}<span class="muted">+</span><span class="ball ${getBallClass(bonus)}">${bonus}</span></div>`;
+      const className = highlights ? "balls scored" : "balls";
+      if (!bonus) return `<div class="${className}">${mainBalls}</div>`;
+      return `<div class="${className}">${mainBalls}<span class="ball-plus">+</span><span class="ball ${getBallClass(bonus)}">${bonus}</span></div>`;
     }
 
     function formatCurrency(value) {
@@ -1223,164 +1145,93 @@
       return items.slice(0, count).map((item) => item.number);
     }
 
-    function formatNumberList(numbers) {
-      return numbers.length ? numbers.map((number) => `${number}번`).join(", ") : "없음";
+    function formatEok(value) {
+      return `${((value || 0) / 100000000).toFixed(1)}억원`;
     }
 
     function createBriefingModel(data, state) {
       const stats = calculateStats(data.draws, state.preferences.statWindow);
-      const hotNumbers = safeTopNumbers(stats.hotNumbers, 3);
-      const coldNumbers = safeTopNumbers(stats.coldNumbers, 3);
-      const sampleIsThin = stats.drawCount < 10;
-
       return {
         stats,
         cards: [
-          {
-            kicker: "Hot Numbers",
-            title: "최근 강세 번호",
-            numbers: hotNumbers,
-            description: `최근 흐름에서는 ${formatNumberList(hotNumbers)}이 자주 보였습니다.`,
-            warning: sampleIsThin ? "표본이 적어 강세 번호 해석은 참고용입니다." : ""
-          },
-          {
-            kicker: "Cold Numbers",
-            title: "쉬어가는 번호",
-            numbers: coldNumbers,
-            description: `${formatNumberList(coldNumbers)}은 최근 출현이 드문 편입니다.`,
-            warning: sampleIsThin ? "표본이 적어 소외 번호 해석은 참고용입니다." : ""
-          },
-          {
-            kicker: "Structure",
-            title: "이번 주 기준선",
-            numbers: [],
-            description: `홀짝 ${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}, 저고 ${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}, 합계 평균 ${Math.round(stats.averageSum)}점이 중심입니다.`,
-            warning: ""
-          }
+          { title: "최근 강세 번호", numbers: safeTopNumbers(stats.hotNumbers, 3) },
+          { title: "쉬어가는 번호", numbers: safeTopNumbers(stats.coldNumbers, 3) }
         ],
         followers: analyzeLatestNumberFollowers(data.draws)
       };
     }
 
-    function buildRecommendationReasonSummary(recommendation) {
-      if (recommendation.method === "weighted-statistical-v2") {
-        return "최근 100회 출현 횟수에 번호당 1을 더한 가중치로 뽑았습니다. 홀짝·합계·연번은 조합의 특징이며 강제 조건이 아닙니다.";
-      }
-      const hot = recommendation.reason.frequentNumbers;
-      const cold = recommendation.reason.coldNumbers;
-      if (recommendation.method === "fallback-random") {
-        return "기존 규칙으로 충분한 조합을 찾지 못해, 중복 이력만 피한 탐색용 대체 조합입니다.";
-      }
+    const CURRENT_METHODS = [
+      "round-transition",
+      "lstm-stateful-ball-weighted-v3",
+      "weighted-statistical-v2",
+      "walk-forward-backtest-v2"
+    ];
 
-      const extras = [];
-      if ((recommendation.reason.carryOverNumbers || []).length) extras.push(`직전 회차 이월수 ${recommendation.reason.carryOverNumbers.join(", ")}`);
-      if ((recommendation.reason.endingNumbers || []).length) extras.push(`최근 4회 대비 부족했던 끝수 보정 ${recommendation.reason.endingNumbers.join(", ")}`);
-      if ((recommendation.reason.consecutiveRuns || []).length) extras.push(`연번 ${recommendation.reason.consecutiveRuns.map((run) => run.join("-")).join(", ")}`);
-      const extraText = extras.length ? ` ${extras.join("와 ")}도 반영했습니다.` : "";
-
-      if (hot.length && cold.length) {
-        return `강세 번호 ${hot.join(", ")}와 쉬어가던 번호 ${cold.join(", ")}를 섞고, 홀짝 ${recommendation.reason.oddEven} 균형을 맞춘 조합입니다.${extraText}`;
-      }
-
-      if (hot.length) {
-        return `최근 자주 나온 번호 ${hot.join(", ")} 축을 유지하면서 홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh} 균형을 맞춘 조합입니다.${extraText}`;
-      }
-
-      if (cold.length) {
-        return `쉬어가던 번호 ${cold.join(", ")}를 섞어 변화폭을 준 조합이며, 합계 ${recommendation.reason.sum} 기준선도 함께 맞췄습니다.${extraText}`;
-      }
-
-      return `홀짝 ${recommendation.reason.oddEven}, 저고 ${recommendation.reason.lowHigh}, 합계 ${recommendation.reason.sum} 균형을 먼저 맞춘 탐색용 조합입니다.${extraText}`;
-    }
-
-    function renderRecommendationBadges(recommendation) {
-      const badges = [
-        `홀짝 ${recommendation.reason.oddEven}`,
-        `저고 ${recommendation.reason.lowHigh}`,
-        `합계 ${recommendation.reason.sum}`
-      ];
-
-      if (recommendation.reason.frequentNumbers.length) badges.push(`강세 번호 포함 ${recommendation.reason.frequentNumbers.join(", ")}`);
-      if (recommendation.reason.coldNumbers.length) badges.push(`소외 번호 포함 ${recommendation.reason.coldNumbers.join(", ")}`);
-      if ((recommendation.reason.carryOverNumbers || []).length) badges.push(`이월수 ${recommendation.reason.carryOverNumbers.join(", ")}`);
-      if ((recommendation.reason.endingNumbers || []).length) badges.push(`보정 끝수 ${recommendation.reason.endingNumbers.join(", ")}`);
-      if ((recommendation.reason.consecutiveRuns || []).length) badges.push(`연번 ${recommendation.reason.consecutiveRuns.map((run) => run.join("-")).join(", ")}`);
-      if (recommendation.method === "fallback-random") badges.push("대체 조합");
-
-      return `<div class="stat-pills">${badges.map((badge) => `<span class="stat-pill">${badge}</span>`).join("")}</div>`;
+    function renderMatchBadge(match) {
+      if (!match) return "";
+      const tier = getPrizeTier(match.matchCount, match.bonusMatched);
+      const won = tier !== "낙첨";
+      return `<span class="hit-count${won ? " won" : ""}">${match.matchCount}개${match.bonusMatched ? " + 보너스" : ""}${won ? ` · ${tier}` : ""}</span>`;
     }
 
     function renderLstmScoreboard(entries) {
       const panel = document.querySelector("#lstmScorePanel");
       const scored = entries.filter((entry) => entry.result && Array.isArray(entry.result.matches));
       if (!scored.length) {
-        panel.innerHTML = `
-          <div class="section-head">
-            <div>
-              <h2>추천 성적표</h2>
-              <p class="muted">아직 채점 완료된 추천 이력이 없습니다. 추첨 결과가 나온 회차만 여기에 표시됩니다.</p>
-            </div>
-          </div>
-        `;
+        panel.innerHTML = "";
         return;
       }
 
       const allMatches = scored.flatMap((entry) => entry.result.matches);
-      const averageOf = (matches) => matches.length
-        ? matches.reduce((total, match) => total + match.matchCount, 0) / matches.length
-        : 0;
+      const averageOf = (matches) => matches.reduce((total, match) => total + match.matchCount, 0) / matches.length;
+      const threePlusOf = (matches) => matches.filter((match) => match.matchCount >= 3).length;
       const methodGroups = [...new Set(allMatches.map((match) => match.method))].map((method) => ({
         method, matches: allMatches.filter((match) => match.method === method)
       }));
-      const bestMatch = allMatches.reduce((best, match) => Math.max(best, match.matchCount), 0);
+      const currentGroups = CURRENT_METHODS.map((method) => methodGroups.find((group) => group.method === method)).filter(Boolean);
+      const legacyGroups = methodGroups.filter((group) => !CURRENT_METHODS.includes(group.method));
+      const bestOf = (matches) => matches.reduce((best, match) => Math.max(best, match.matchCount), 0);
 
       panel.innerHTML = `
         <div class="section-head">
-          <div>
-            <h2>추천 성적표</h2>
-            <p class="muted">매주 CI가 생성한 기존 추천 5세트와 별도 백테스트 추천 5세트를 회차별로 누적하고 실제 당첨번호와 자동 대조합니다. 무작위 6개 선택의 이론 기대 적중은 세트당 0.80개입니다. 방식별 세트 수와 버전이 다르므로 아래 실전 누적값은 동일 조건 비교가 아닙니다.</p>          </div>
+          <h2>추천 성적표</h2>
+          <div class="stat-pills">
+            <span class="stat-pill">${scored.length}회차</span>
+            <span class="stat-pill">이론 0.80개</span>
+            <span class="stat-pill">최고 ${bestOf(allMatches)}개</span>
+          </div>
         </div>
-        <div class="stat-pills" style="margin-bottom:12px;">
-          <span class="stat-pill">채점 완료 ${scored.length}회차 · ${allMatches.length}세트</span>
-          <span class="stat-pill">전체 버전 평균 적중 ${averageOf(allMatches).toFixed(2)}개</span>
-          ${methodGroups.map((group) => `<span class="stat-pill">${methodLabel(group.method)} 평균 ${averageOf(group.matches).toFixed(2)}개 · ${group.matches.length}세트 · 3개 이상 ${group.matches.filter((m) => m.matchCount >= 3).length}세트</span>`).join("")}
-          <span class="stat-pill">이론 기대값 0.80개</span>
-          ${allMatches.length ? `<span class="stat-pill">최고 기록 ${bestMatch}개 일치</span>` : ""}
+        <div class="score-grid">
+          ${currentGroups.map((group) => `<div class="score-tile"><span>${methodLabel(group.method)}</span><strong>${averageOf(group.matches).toFixed(2)}</strong><small>${group.matches.length}세트 · 3개 이상 ${threePlusOf(group.matches)}</small></div>`).join("")}
         </div>
+        ${legacyGroups.length ? `
+          <details class="fold">
+            <summary>이전 버전</summary>
+            <div class="stat-pills" style="margin-top:10px;">
+              ${legacyGroups.map((group) => `<span class="stat-pill">${methodLabel(group.method)} ${averageOf(group.matches).toFixed(2)}개 · ${group.matches.length}세트 · 3개 이상 ${threePlusOf(group.matches)}</span>`).join("")}
+            </div>
+          </details>` : ""}
         <div class="history-batch-list">
-          ${scored.slice(0, 20).map((entry) => {
+          ${scored.slice(0, 20).map((entry, index) => {
             const result = entry.result;
             return `
-              <section class="history-batch">
-                <div class="history-batch-head">
-                  <div>
-                    <h3>${entry.targetRound}회 예측 (학습 기준 ${entry.sourceLatestRound || "-"}회)</h3>
-                    <p class="muted">채점 완료${result.date ? ` · ${result.date}` : ""}</p>
-                  </div>
+              <details class="history-batch"${index ? "" : " open"}>
+                <summary>
+                  <span class="batch-round">${entry.targetRound}회</span>
                   ${renderBalls(result.winningNumbers, result.bonus)}
-                  ${entry.trainedAt ? `<span class="stat-pill">${formatDateTime(entry.trainedAt)} 학습</span>` : ""}
+                  <span class="stat-pill batch-best">최고 ${bestOf(result.matches)}개</span>
+                </summary>
+                <div class="score-rows">
+                  ${entry.recommendations.map((rec, recIndex) => `
+                    <article class="recommendation-card score-row">
+                      <span class="rec-label">${methodLabel(rec.method)}</span>
+                      ${renderBalls(rec.numbers, null, { winningNumbers: result.winningNumbers, bonus: result.bonus })}
+                      ${renderMatchBadge(result.matches[recIndex])}
+                    </article>
+                  `).join("")}
                 </div>
-                <div class="recommendation-list">
-                  ${entry.recommendations.map((rec, index) => {
-                    const match = result && result.matches[index] ? result.matches[index] : null;
-                    return `
-                      <article class="recommendation-card">
-                        ${renderBalls(rec.numbers, null, {
-                          winningNumbers: result.winningNumbers,
-                          bonus: result.bonus
-                        })}
-                        <div class="stat-pills" style="margin-top:10px;">
-                          <span class="stat-pill">${methodLabel(rec.method)}</span>
-                          ${match
-                            ? `<span class="stat-pill">${match.matchCount}개 일치${match.bonusMatched ? " + 보너스" : ""}</span>
-                               <span class="stat-pill">${getPrizeTier(match.matchCount, match.bonusMatched)}</span>`
-                            : `<span class="stat-pill">결과 대기</span>`}
-                        </div>
-                      </article>
-                    `;
-                  }).join("")}
-                </div>
-              </section>
+              </details>
             `;
           }).join("")}
         </div>
@@ -1388,79 +1239,70 @@
     }
 
     function renderStatus(state, data, loadStatus) {
-      document.querySelector("#statusPanel").innerHTML = `
-        <strong>${loadStatus.title}</strong>
-        <p>${loadStatus.message}</p>
-        <p>데이터 회차: ${data.draws.length}개 · 최신 회차: ${data.latestRound || "-"} · 데이터 갱신: ${formatDateTime(data.updatedAt)}</p>
-      `;
+      const panel = document.querySelector("#statusPanel");
+      panel.classList.toggle("error", Boolean(loadStatus.failed));
+      panel.textContent = loadStatus.failed
+        ? loadStatus.message
+        : data.latestRound ? `${formatDateTime(data.updatedAt)} 갱신` : loadStatus.title;
     }
 
     function renderLatest(data) {
       const latest = data.draws[0];
       document.querySelector("#latestPanel").innerHTML = latest ? `
         <div class="section-head">
-          <div>
-            <h2>최신 당첨 번호</h2>
-            <p class="muted">${latest.round}회 · ${latest.date || "날짜 없음"}</p>
-          </div>
+          <h2>${latest.round}회 당첨 번호</h2>
+          <span class="muted">${latest.date}</span>
         </div>
         ${renderBalls(latest.numbers, latest.bonus)}
-        <div class="stat-pills">
-          <span class="stat-pill">1등 ${latest.firstWinnerCount}명</span>
-          <span class="stat-pill">1인당 ${formatCurrency(latest.firstPrizeAmount)}원</span>
+        <div class="hero-stats">
+          <div><span>1등</span><strong>${latest.firstWinnerCount}명</strong></div>
+          <div><span>1인당</span><strong>${formatEok(latest.firstPrizeAmount)}</strong></div>
         </div>
-      ` : `
-        <h2>최신 당첨 번호</h2>
-        <p class="error">아직 읽어온 당첨번호가 없습니다.</p>
-      `;
+      ` : "";
     }
 
     function renderBriefing(data, state) {
       const panel = document.querySelector("#briefingPanel");
       if (data.draws.length === 0) {
-        panel.innerHTML = "<h2>이번 주 브리핑</h2><p>데이터를 먼저 불러와야 브리핑을 만들 수 있습니다.</p>";
+        panel.innerHTML = "";
         return;
       }
 
       const briefing = createBriefingModel(data, state);
+      const { stats } = briefing;
       panel.innerHTML = `
         <div class="section-head">
-          <div>
-            <h2>이번 주 브리핑</h2>
-            <p class="muted">최신 회차를 기준점으로 삼고, 최근 100개 회차 통계에서 바로 읽히는 흐름만 먼저 요약했습니다.</p>
-          </div>
+          <h2>이번 주 브리핑</h2>
+          <span class="stat-pill">최근 ${Math.min(stats.drawCount, state.preferences.statWindow)}회</span>
         </div>
         <div class="briefing-grid">
           ${briefing.cards.map((card) => `
             <article class="briefing-card">
-              <p class="briefing-kicker">${card.kicker}</p>
               <h3>${card.title}</h3>
-              ${card.numbers.length ? `
-                <div class="briefing-numbers">
-                  ${card.numbers.map((number) => `<span class="briefing-number ${getBallClass(number)}">${number}</span>`).join("")}
-                </div>
-              ` : `
-                <div class="stat-pills">
-                  <span class="stat-pill">최근 ${Math.min(briefing.stats.drawCount, state.preferences.statWindow)}개 회차 기준</span>
-                </div>
-              `}
-              <p>${card.description}</p>
-              ${card.warning ? `<p class="warning" style="margin-top:12px;">${card.warning}</p>` : ""}
+              ${renderBalls(card.numbers)}
             </article>
           `).join("")}
-          <article class="briefing-card support-card">
-            <p class="briefing-kicker">Latest Follow-up</p>
-            <h3>최신 번호 기반 보조 흐름</h3>
-            <p>최신 번호별로 과거 다음 회차에 자주 나온 번호입니다. 최신 6개와 많이 겹친 회차일수록 크게 반영했습니다.</p>
-            ${briefing.followers.map((analysis) => `
-              <div class="inline-ball-list">
-                <span class="ball ${getBallClass(analysis.number)}">${analysis.number}</span>
-                <span>→</span>
-                ${analysis.sampleCount >= 3
-                  ? analysis.weightedTopNumbers.map((number) => `<span class="ball ${getBallClass(number)}">${number}</span>`).join("")
-                  : `<span class="stat-pill">표본 부족</span>`}
-              </div>
-            `).join("")}
+          <article class="briefing-card">
+            <h3>이번 주 기준선</h3>
+            <div class="stat-pills">
+              <span class="stat-pill">홀짝 ${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}</span>
+              <span class="stat-pill">저고 ${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}</span>
+              <span class="stat-pill">합계 ${Math.round(stats.averageSum)}</span>
+            </div>
+          </article>
+          <article class="briefing-card follow-card">
+            <h3>최신 번호의 다음 회차</h3>
+            <div class="follow-list">
+              ${briefing.followers.map((analysis) => `
+                <div class="inline-ball-list">
+                  <span class="ball ${getBallClass(analysis.number)}">${analysis.number}</span>
+                  <span>→</span>
+                  ${analysis.sampleCount >= 3
+                    ? analysis.weightedTopNumbers.map((number) => `<span class="ball ${getBallClass(number)}">${number}</span>`).join("")
+                    : `<span class="stat-pill">표본 부족</span>`}
+                </div>
+              `).join("")}
+            </div>
           </article>
         </div>
       `;
@@ -1468,10 +1310,10 @@
 
     function methodLabel(method) {
       if (method === "uniform") return "균등 무작위";
-      if (method === "lstm-stateful-ball-weighted-v3") return "LSTM 상태유지 · 원문 방식 v3";
+      if (method === "lstm-stateful-ball-weighted-v3") return "LSTM";
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
-      if (method === "weighted-statistical-v2") return "통계 빈도 가중 v2";
-      if (method === "walk-forward-backtest-v2") return "시간순 백테스트 선택 v2";
+      if (method === "weighted-statistical-v2") return "통계";
+      if (method === "walk-forward-backtest-v2") return "백테스트";
       if (method === "round-transition") return "회차 전이";
       if (method === "lstm-combination-best") return "LSTM 최고 점수 조합";
       if (method === "lstm-combination-diverse") return "LSTM 다양성 조합";
@@ -1482,141 +1324,107 @@
       return method;
     }
 
-    function renderLstmRecommendations(prediction, data) {
-      if (!prediction || !prediction.recommendations.length) {
-        return `
-          <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px dashed var(--line);border-radius:12px;">
-            <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span></h3>
-            <p class="muted">학습 결과(lstm-prediction.json)가 아직 없습니다. 새 회차가 갱신되면 자동 생성됩니다.</p>
-          </div>`;
-      }
+    function evaluationPercent(value) {
+      return finiteNumber(value) === null ? "-" : `${(value * 100).toFixed(2)}%`;
+    }
 
-      const isStale = Number(prediction.sourceLatestRound) !== Number(data.latestRound);
-      const trained = prediction.trainedAt ? formatDateTime(prediction.trainedAt) : "-";
-
+    function renderRecommendationGroup(label, recommendations, tag = "") {
+      if (!recommendations.length) return "";
       return `
-        <div class="lstm-block" style="margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f0f6ff;${isStale ? "opacity:0.65;" : ""}">
-          <h3 style="margin:0 0 6px;">딥러닝 실험 추천 <span class="stat-pill">실험</span><span class="stat-pill">2세트</span></h3>
-          <p class="muted">학습 기준 ${prediction.sourceLatestRound}회 → 예측 대상 ${prediction.targetRound}회 · 학습 시각 ${trained} · ${prediction.stateful
-            ? `회차 순서대로 상태 유지 · ${evaluationNumber(prediction.epochs, 0)}에포크 학습`
-            : `입력 ${prediction.window}회 시퀀스`}</p>
-          <p class="muted">${prediction.stateful
-            ? '128유닛 상태유지 LSTM이 이전 회차에서 다음 회차를 학습합니다. <a href="https://tykimos.github.io/2020/01/25/keras_lstm_lotto_v895/" target="_blank" rel="noopener noreferrer">참고 원문</a>처럼 점수 × 100 + 1의 정수 부분을 공 개수로 사용해 추출합니다.'
-            : prediction.comparison
-            ? "번호별 출현 점수를 가중치로 사용합니다. 아래 비교표에서 미사용 구간의 성적을 확인하세요."
-            : `검증 AUC ${evaluationNumber(prediction.validationAuc)} · 평가 후보 ${prediction.candidateCount.toLocaleString()}개 · 별도 평가 구간 없음`}</p>
-          ${isStale ? `<p class="warning">⚠ 데이터는 ${data.latestRound}회까지 갱신됐지만 학습은 ${prediction.sourceLatestRound}회 기준입니다. 재학습 대기 중이라 참고용입니다.</p>` : ""}
-          <div class="recommendation-list" style="margin-top:12px;">
-            ${prediction.recommendations.filter((rec) => rec.method.startsWith("lstm")).map((rec) => `
-              <article class="recommendation-card">
-                ${renderBalls(rec.numbers)}
-                <div class="stat-pills" style="margin-top:10px;">
-                  <span class="stat-pill">딥러닝</span>
-                  <span class="stat-pill">${methodLabel(rec.method)}</span>
-                  ${rec.modelScore === null ? "" : `<span class="stat-pill">상대 점수 ${rec.modelScore.toFixed(4)}</span>`}
-                </div>
-              </article>
-            `).join("")}
+        <section class="rec-group">
+          <h3>${label}${tag}</h3>
+          <div class="rec-sets">
+            ${recommendations.map((rec) => `<article class="recommendation-card">${renderBalls(rec.numbers)}</article>`).join("")}
           </div>
-          ${prediction.stateful && prediction.numberScores ? `
-            <details style="margin-top:12px;">
-              <summary>45개 번호의 모델 점수와 추출 가중치</summary>
-              <p class="muted">점수순으로 표시합니다. 공이 많을수록 추출되기 쉽지만 선택이 확정되지는 않습니다. 공 개수는 번호별 출현 확률이 아닙니다.</p>
-              <div class="table-wrap" tabindex="0" role="region" aria-label="번호별 모델 점수">
-                <table>
-                  <thead><tr><th scope="col">번호</th><th scope="col">모델 점수</th><th scope="col">공 개수</th></tr></thead>
-                  <tbody>${prediction.numberScores.map((score, index) => ({ number: index + 1, score }))
-                    .sort((a, b) => b.score - a.score || a.number - b.number)
-                    .map(({ number, score }) => `<tr><th scope="row">${number}</th><td>${score.toFixed(6)}</td><td>${Math.floor(score * 100 + 1)}</td></tr>`).join("")}
-                  </tbody>
-                </table>
-              </div>
-            </details>` : ""}
-          <p class="warning" style="margin-top:12px;">${prediction.warning || "로또는 독립시행이므로 실험용이며 당첨 확률 상승을 의미하지 않습니다."}</p>
-        </div>`;
+        </section>`;
+    }
+
+    function renderLstmRecommendations(prediction, data) {
+      if (!prediction) return "";
+      const isStale = Number(prediction.sourceLatestRound) !== Number(data.latestRound);
+      return renderRecommendationGroup("LSTM",
+        prediction.recommendations.filter((rec) => rec.method.startsWith("lstm")),
+        isStale ? `<span class="stat-pill warn">${prediction.sourceLatestRound}회 기준</span>` : "");
+    }
+
+    function renderLstmMetrics(prediction) {
+      if (!prediction) return "";
+      return `
+        <h3>LSTM</h3>
+        <div class="stat-pills">
+          <span class="stat-pill">학습 ${prediction.sourceLatestRound}회</span>
+          ${prediction.trainedAt ? `<span class="stat-pill">${formatDateTime(prediction.trainedAt)}</span>` : ""}
+          ${finiteNumber(prediction.epochs) === null ? "" : `<span class="stat-pill">${prediction.epochs}에포크</span>`}
+        </div>
+        ${prediction.numberScores ? `
+          <details>
+            <summary>번호별 점수</summary>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="번호별 모델 점수">
+              <table>
+                <thead><tr><th scope="col">번호</th><th scope="col">모델 점수</th><th scope="col">공 개수</th></tr></thead>
+                <tbody>${prediction.numberScores.map((score, index) => ({ number: index + 1, score }))
+                  .sort((a, b) => b.score - a.score || a.number - b.number)
+                  .map(({ number, score }) => `<tr><th scope="row">${number}</th><td>${score.toFixed(6)}</td><td>${Math.floor(score * 100 + 1)}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+          </details>` : ""}`;
     }
 
     function renderBacktestRecommendations(prediction) {
-      const recommendations = prediction
-        ? prediction.recommendations.filter((rec) => rec.method.startsWith("walk-forward-backtest"))
-        : [];
-      if (!recommendations.length) {
-        return `<h3 style="margin:20px 0 8px;">백테스트 추천 <span class="stat-pill">대기 중</span></h3>
-          <p class="muted">다음 데이터 갱신 때 별도 추천 5세트가 생성됩니다.</p>`;
-      }
+      return prediction
+        ? renderRecommendationGroup("백테스트", prediction.recommendations.filter((rec) => rec.method.startsWith("walk-forward-backtest")))
+        : "";
+    }
 
-      const summary = prediction.backtest;
-      const prequential = summary?.evaluationMode === "prequential-selection-v2";
-      const selected = !summary || summary.selectedMethod === "uniform"
+    function renderBacktestMetrics(prediction) {
+      const summary = prediction?.backtest;
+      if (!summary) return "";
+      const selected = summary.selectedMethod === "uniform"
         ? "균등 무작위"
         : summary.selectedMethod === "frequency-all"
           ? "전체 누적 빈도"
           : summary.selectedMethod === "frequency-window"
             ? `최근 ${summary.selectedWindow}회 빈도`
             : `반감기 ${summary.selectedHalfLife}회 시간감쇠 빈도`;
-      const mean = summary && summary.meanMatches !== null
-        ? summary.meanMatches.toFixed(3) : "-";
-      const baseline = summary && summary.randomBaseline !== null
-        ? summary.randomBaseline.toFixed(3) : "-";
       return `
-        <h3 style="margin:20px 0 8px;">백테스트 추천 <span class="stat-pill">${recommendations.length}세트</span></h3>
-        <p class="muted">이번 추천 방식: ${selected}</p>
-        <p class="muted">${prequential
-          ? `이전 성적으로 방식을 선택한 뒤 다음 회차를 채점했습니다. 준비 구간 ${evaluationNumber(summary.warmupRounds, 0)}회 제외 · 평가 ${summary.testedRounds}회 · 난수 시드 ${evaluationNumber(summary.seedCount, 0)}개.`
-          : "이전 버전: 방식 선택에 사용한 과거 성적이며 별도 검증 성적이 아닙니다."}</p>
+        <h3>백테스트</h3>
         <div class="stat-pills">
-          <span class="stat-pill">${prequential ? "선택 전략 평균" : "선택 구간 평균"} 적중 ${mean}개</span>
-          <span class="stat-pill">무작위 기준 ${baseline}개</span>
-          <span class="stat-pill">이론 기대값 0.800개</span>
-          ${prequential ? `<span class="stat-pill">3개 이상 일치 ${finiteNumber(summary.threePlusRate) === null ? "-" : (summary.threePlusRate * 100).toFixed(2) + "%"}</span>
-          <span class="stat-pill">무작위 대비 차이 95% 구간 ${evaluationInterval(summary.differenceCI95)}</span>` : ""}
-        </div>
-        ${prequential ? '<p class="muted">평균은 회차마다 선택된 방식 전체의 성적입니다. 이번에 선택된 한 방식의 고정 성적이 아닙니다. 신뢰구간은 회차 단위 재표집 근사치입니다.</p>' : ""}
-        <div class="recommendation-list" style="margin-top:12px;">
-          ${recommendations.map((recommendation) => `
-            <article class="recommendation-card">
-              ${renderBalls(recommendation.numbers)}
-              <div class="stat-pills" style="margin-top:10px;">
-                <span class="stat-pill">${methodLabel(recommendation.method)}</span>
-              </div>
-            </article>
-          `).join("")}
+          <span class="stat-pill">선택 ${selected}</span>
+          <span class="stat-pill">평균 ${evaluationNumber(summary.meanMatches)}개</span>
+          <span class="stat-pill">무작위 ${evaluationNumber(summary.randomBaseline)}개</span>
+          <span class="stat-pill">3개 이상 ${evaluationPercent(summary.threePlusRate)}</span>
+          <span class="stat-pill">무작위 대비 95% 구간 ${evaluationInterval(summary.differenceCI95)}</span>
+          <span class="stat-pill">평가 ${summary.testedRounds.toLocaleString()}회</span>
         </div>`;
     }
 
-
     function renderMethodComparison(prediction) {
       const comparison = prediction?.comparison;
-      if (!comparison) return '<p class="muted">동일 조건 비교는 개선 버전 재학습 후 표시됩니다.</p>';
+      if (!comparison) return "";
       const methods = comparison.methods.filter((row) =>
         ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2", "lstm-stateful-ball-weighted-v3"].includes(row?.method));
       return `
-        <details style="margin-top:20px;"><summary>동일 조건 추천 비교</summary>
-        <p class="muted">학습·조정에 사용하지 않은 ${evaluationNumber(comparison.testStartRound, 0)}~${evaluationNumber(comparison.testEndRound, 0)}회,
-          총 ${evaluationNumber(comparison.testedRounds, 0)}회 · 방식별 ${evaluationNumber(comparison.setsPerMethod, 0)}세트 · 난수 시드 ${evaluationNumber(comparison.seedCount, 0)}개.</p>
+        <h3>동일 조건 비교</h3>
+        <div class="stat-pills">
+          <span class="stat-pill">${evaluationNumber(comparison.testStartRound, 0)}~${evaluationNumber(comparison.testEndRound, 0)}회</span>
+          <span class="stat-pill">방식별 ${evaluationNumber(comparison.setsPerMethod, 0)}세트</span>
+          <span class="stat-pill">시드 ${evaluationNumber(comparison.seedCount, 0)}개</span>
+          <span class="stat-pill">AUC ${evaluationNumber(comparison.testAuc)}</span>
+          <span class="stat-pill">Brier ${evaluationNumber(comparison.brierScore, 6)} / 균등 ${evaluationNumber(comparison.uniformBrierScore, 6)}</span>
+        </div>
         <div class="table-wrap" tabindex="0" role="region" aria-label="추천 방식별 평가 성적">
           <table>
-            <caption class="muted" style="text-align:left;padding:10px;">같은 평가 회차·세트 수로 비교한 성적</caption>
-            <thead><tr><th scope="col">방식</th><th scope="col">평균 적중</th><th scope="col">3개 이상 일치</th><th scope="col">무작위 대비 차이</th><th scope="col">차이의 95% 구간</th><th scope="col">해석</th></tr></thead>
+            <thead><tr><th scope="col">방식</th><th scope="col">평균 적중</th><th scope="col">3개 이상</th><th scope="col">무작위 대비</th><th scope="col">95% 구간</th></tr></thead>
             <tbody>${methods.map((row) => `
               <tr><th scope="row">${methodLabel(row.method)}</th>
                 <td>${evaluationNumber(row.meanMatches)}개</td>
-                <td>${finiteNumber(row.threePlusRate) === null ? "-" : (row.threePlusRate * 100).toFixed(2) + "%"}</td>
+                <td>${evaluationPercent(row.threePlusRate)}</td>
                 <td>${evaluationNumber(row.differenceVsRandom)}개</td>
-                <td>${evaluationInterval(row.differenceCI95)}</td>
-                <td>${row.method === "uniform" ? "비교 기준"
-                  : comparison.testedRounds >= 50 && evaluationInterval(row.differenceCI95) !== "-" && row.differenceCI95[0] > 0
-                    ? "이 구간에서 양의 차이 관측" : "우위 미확인"}</td></tr>`).join("")}
+                <td>${evaluationInterval(row.differenceCI95)}</td></tr>`).join("")}
             </tbody>
           </table>
-        </div>
-        <p class="muted">평가 중 LSTM 가중치는 고정하고 매회 입력과 통계는 직전 회차까지 갱신했습니다. 상태유지 모델은 회차 사이의 내부 상태도 이어갑니다. 다음 회차 추천은 전체 데이터로 재학습합니다.
-          신뢰구간은 회차 단위 재표집 근사치이며 여러 방식의 동시 비교를 보정한 확증 결과가 아닙니다.</p>
-        <details><summary>번호별 점수 진단</summary>
-          <p class="muted">평가 AUC ${evaluationNumber(comparison.testAuc)} · Brier 오차 ${evaluationNumber(comparison.brierScore, 6)} · 균등 기준 ${evaluationNumber(comparison.uniformBrierScore, 6)}.
-          Brier 오차는 작을수록 좋으며 AUC 0.5는 무작위 구분 수준입니다. 조합의 당첨 확률을 뜻하지 않습니다.</p>
-        </details>
-        </details>`;
+        </div>`;
     }
 
     const TRANSITION_WARMUP = 200;  // 전이 예측 채점 전에 쌓는 연속 회차 쌍
@@ -1674,7 +1482,7 @@
     function renderRecommendations(state, data) {
       const panel = document.querySelector("#recommendPanel");
       if (data.draws.length === 0) {
-        panel.innerHTML = "<h2>추천 번호</h2><p>데이터를 먼저 불러와야 추천할 수 있습니다.</p>";
+        panel.innerHTML = "";
         return;
       }
 
@@ -1689,52 +1497,38 @@
       if (transition) sets.push(new Set(transition.numbers));
       const maxShared = sets.length > 1 ? Math.max(...sets.flatMap((set, index) =>
         sets.slice(index + 1).map((other) => [...set].filter((n) => other.has(n)).length))) : 0;
+      const targetRound = transition?.targetRound || lstmPrediction?.targetRound;
+      const evaluation = transition?.evaluation;
       panel.innerHTML = `
         <div class="section-head">
-          <div>
-            <h2>추천 번호</h2>
-            <p class="muted">추천 번호는 과거 데이터 기반 탐색용입니다. 모든 조합의 당첨 확률은 동일하며 당첨을 보장하지 않습니다. 기존 딥러닝·통계·백테스트 추천은 역대 1등 당첨번호와 완전히 같은 조합을 제외합니다.</p>
-            <p class="muted">기존 딥러닝 2세트·통계 3세트·백테스트 5세트에 독립적인 회차 전이 예측 1세트를 추가했습니다. 전이 예측은 당첨 이력이 갱신되면 자동 계산되며, 같은 데이터에서는 어느 기기에서 보든 같은 번호입니다.</p>
+          <h2>${targetRound ? `${targetRound}회 ` : ""}추천 번호</h2>
+          <span class="stat-pill">전체 ${sets.length}세트</span>
+        </div>
+        <div>
+          ${transition ? renderRecommendationGroup("회차 전이", [transition]) : ""}
+          ${renderLstmRecommendations(lstmPrediction, data)}
+          ${renderRecommendationGroup("통계", statRecs)}
+          ${renderBacktestRecommendations(lstmPrediction)}
+        </div>
+        <details class="fold">
+          <summary>검증 지표</summary>
+          <h3>전체</h3>
+          <div class="stat-pills">
+            <span class="stat-pill">서로 다른 번호 ${new Set(sets.flatMap((set) => [...set])).size}개</span>
+            <span class="stat-pill">최대 겹침 ${maxShared}개</span>
           </div>
-        </div>
-        ${sets.length ? `<p class="muted">전체 ${sets.length}세트 · 서로 다른 번호 ${new Set(sets.flatMap((set) => [...set])).size}개 · 두 세트 간 최대 겹침 ${maxShared}개. 분산 정도이며 당첨 확률 상승 지표는 아닙니다.</p>` : ""}
-        <h3 style="margin:20px 0 8px;">회차 전이 예측 <span class="stat-pill">1세트</span>${transition ? `<span class="stat-pill">${transition.targetRound}회 대상</span>` : ""}</h3>
-        ${transition ? `
-          <div class="recommendation-list">
-            <article class="recommendation-card">
-              ${renderBalls(transition.numbers)}
-              <p class="muted">${transition.sourceLatestRound}회까지 · 연속된 ${transition.transitions.toLocaleString()}쌍의 회차 분석</p>
-              <p>직전 당첨번호 각각이 과거에 나온 뒤, 바로 다음 회차에 등장한 번호를 집계했습니다. 적은 표본을 보정한 전이 점수를 평균 내어 상위 6개를 선택합니다. 동점이면 작은 번호를 우선합니다.</p>
-              <p class="muted">보너스 번호는 제외합니다. 기존 추천·홀짝·합계 규칙을 사용하지 않는 독립 실험입니다. 추첨 후 아래 성적표에서 자동 채점됩니다.</p>
-              ${transition.evaluation.differenceCI95 ? `
-                <div class="stat-pills">
-                  <span class="stat-pill">시간순 검증 평균 적중 ${evaluationNumber(transition.evaluation.meanMatches)}개</span>
-                  <span class="stat-pill">이론 기대값 0.800개</span>
-                  <span class="stat-pill">3개 이상 일치 ${(transition.evaluation.threePlusRate * 100).toFixed(2)}%</span>
-                  <span class="stat-pill">이론 대비 차이 95% 구간 ${evaluationInterval(transition.evaluation.differenceCI95)}</span>
-                  <span class="stat-pill">${transition.evaluation.testedRounds >= 50 && transition.evaluation.differenceCI95[0] > 0
-                    ? "이 구간에서 양의 차이 관측" : "우위 미확인"}</span>
-                </div>
-                <p class="muted">각 회차를 직전 회차까지의 이력만으로 예측해 채점했습니다. 준비 구간 ${transition.evaluation.warmupTransitions}쌍 제외 · 평가 ${transition.evaluation.testedRounds.toLocaleString()}회. 구간은 회차 단위 정규근사이며 당첨 확률 상승을 뜻하지 않습니다.</p>`
-                : `<p class="muted">시간순 검증에 필요한 회차가 부족해 예측력은 검증되지 않았습니다.</p>`}
-            </article>
-          </div>` : `<p class="muted">전이 예측에는 유효한 연속 회차 이력이 필요합니다.</p>`}
-        ${renderLstmRecommendations(lstmPrediction, data)}
-        <h3 style="margin:20px 0 8px;">통계 추천 <span class="stat-pill">${statRecs.length}세트</span>${lstmPrediction ? `<span class="stat-pill">${lstmPrediction.targetRound}회 대상</span>` : ""}</h3>
-        <p class="muted">${statRecs.some((rec) => rec.method === "weighted-statistical-v2")
-          ? "최근 100회 빈도를 완만하게 반영합니다. 최근 부족한 끝수·연번을 채우는 보정은 사용하지 않습니다."
-          : "이전 버전 통계 추천입니다. 기존 규칙으로 생성된 조합을 표시합니다."} 추첨 후 아래 성적표에서 자동 채점됩니다.</p>
-        <div class="recommendation-list" style="margin-top:12px;">
-          ${statRecs.length ? statRecs.map((recommendation) => `
-            <article class="recommendation-card">
-              ${renderBalls(recommendation.numbers)}
-              ${recommendation.reason ? renderRecommendationBadges(recommendation) : ""}
-              ${recommendation.reason ? `<p style="margin-top:12px;">${buildRecommendationReasonSummary(recommendation)}</p>` : ""}
-            </article>
-          `).join("") : "<p>통계 추천이 아직 생성되지 않았습니다. 다음 데이터 갱신 때 자동 생성됩니다.</p>"}
-        </div>
-        ${renderBacktestRecommendations(lstmPrediction)}
-        ${renderMethodComparison(lstmPrediction)}
+          ${evaluation?.differenceCI95 ? `
+            <h3>회차 전이</h3>
+            <div class="stat-pills">
+              <span class="stat-pill">평균 ${evaluationNumber(evaluation.meanMatches)}개</span>
+              <span class="stat-pill">3개 이상 ${evaluationPercent(evaluation.threePlusRate)}</span>
+              <span class="stat-pill">이론 대비 차이 95% 구간 ${evaluationInterval(evaluation.differenceCI95)}</span>
+              <span class="stat-pill">평가 ${evaluation.testedRounds.toLocaleString()}회</span>
+            </div>` : ""}
+          ${renderLstmMetrics(lstmPrediction)}
+          ${renderBacktestMetrics(lstmPrediction)}
+          ${renderMethodComparison(lstmPrediction)}
+        </details>
       `;
     }
 
@@ -1748,19 +1542,31 @@
       `).join("")}</div>`;
     }
 
+    function renderKeyValues(rows) {
+      return `<dl class="kv">${rows.map(([key, value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join("")}</dl>`;
+    }
+
     function renderStats(data) {
+      const panel = document.querySelector("#statsPanel");
+      if (data.draws.length === 0) {
+        panel.innerHTML = "";
+        return;
+      }
+
       const stats = calculateStats(data.draws, appState.preferences.statWindow);
       const hotMax = Math.max(...stats.hotNumbers.map((item) => item.count), 1);
       const coldMax = Math.max(...stats.coldNumbers.map((item) => item.count), 1);
-      document.querySelector("#statsPanel").innerHTML = `
-        <h2>통계 개요</h2>
-        <p class="muted">브리핑과 추천에 쓰인 근거를 더 길게 확인하는 영역입니다. 최근 ${Math.min(appState.preferences.statWindow, data.draws.length)}개 회차 기준입니다.</p>
+      panel.innerHTML = `
+        <div class="section-head">
+          <h2>통계 개요</h2>
+          <span class="stat-pill">최근 ${Math.min(appState.preferences.statWindow, data.draws.length)}회</span>
+        </div>
         <div class="grid">
           <div class="metric"><h3>평균 홀짝</h3><p class="metric-value">${stats.averageOdd.toFixed(1)}:${stats.averageEven.toFixed(1)}</p></div>
           <div class="metric"><h3>평균 저고</h3><p class="metric-value">${stats.averageLow.toFixed(1)}:${stats.averageHigh.toFixed(1)}</p></div>
           <div class="metric"><h3>합계 평균</h3><p class="metric-value">${stats.averageSum.toFixed(1)}</p><p class="muted">${stats.minSum}~${stats.maxSum}</p></div>
         </div>
-        <div class="grid" style="margin-top:12px;">
+        <div class="grid">
           <div class="metric"><h3>자주 나온 번호 TOP 10</h3>${renderMiniBars(stats.hotNumbers, hotMax, (item) => `${item.number}번`)}</div>
           <div class="metric"><h3>덜 나온 번호 TOP 10</h3>${renderMiniBars(stats.coldNumbers, coldMax, (item) => `${item.number}번`)}</div>
         </div>
@@ -1770,48 +1576,34 @@
     function renderFollowerStats(data) {
       const panel = document.querySelector("#followerStatsPanel");
       if (data.draws.length === 0) {
-        panel.innerHTML = "<h2>최신 번호 기준 다음회차 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+        panel.innerHTML = "";
         return;
       }
 
       const analyses = analyzeLatestNumberFollowers(data.draws);
       panel.innerHTML = `
         <div class="section-head">
-          <div>
-            <h2>최신 당첨 번호 기준 다음회차 통계</h2>
-            <p class="muted">최신 당첨 번호 각각이 포함됐던 전체 과거 회차를 기준으로, 다음 회차에서 어떤 번호와 구조가 뒤따랐는지 요약합니다.</p>
-          </div>
+          <h2>최신 번호의 다음 회차 통계</h2>
         </div>
         <div class="latest-follow-grid">
           ${analyses.map((analysis) => {
             const hotMax = Math.max(...analysis.topNextNumbers.map((item) => item.count), 1);
             return `
               <article class="latest-follow-card">
-                <span class="ball-badge ${getBallClass(analysis.number)}">${analysis.number}</span>
-                <h3>${analysis.number}번이 나온 뒤 다음 회차</h3>
+                <div class="follow-head">
+                  <span class="ball ${getBallClass(analysis.number)}">${analysis.number}</span>
+                  <h3>다음 회차</h3>
+                  <span class="stat-pill">${analysis.sampleCount ? `표본 ${analysis.sampleCount}` : "표본 부족"}</span>
+                </div>
                 ${analysis.sampleCount ? `
-                  <div class="grid">
-                    <div class="metric">
-                      <p class="muted">표본</p>
-                      <p class="metric-value">${analysis.sampleCount}</p>
-                    </div>
-                    <div class="metric">
-                      <p class="muted">다음 회차 합계 평균</p>
-                      <p class="metric-value">${analysis.stats.averageSum.toFixed(1)}</p>
-                    </div>
-                  </div>
-                  <div style="margin-top:10px;">
-                    <h3>다음 회차에서 자주 나온 번호</h3>
-                    ${renderMiniBars(analysis.topNextNumbers, hotMax, (item) => `${item.number}번`)}
-                  </div>
+                  ${renderMiniBars(analysis.topNextNumbers, hotMax, (item) => `${item.number}번`)}
                   <div class="stat-pills">
-                    <span class="stat-pill">평균 홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}</span>
-                    <span class="stat-pill">평균 저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}</span>
-                    <span class="stat-pill">최신 번호 재등장 ${analysis.repeatedLatestNumbers.join(", ") || "없음"}</span>
+                    <span class="stat-pill">합계 ${analysis.stats.averageSum.toFixed(1)}</span>
+                    <span class="stat-pill">홀짝 ${analysis.stats.averageOdd.toFixed(1)}:${analysis.stats.averageEven.toFixed(1)}</span>
+                    <span class="stat-pill">저고 ${analysis.stats.averageLow.toFixed(1)}:${analysis.stats.averageHigh.toFixed(1)}</span>
+                    <span class="stat-pill">재등장 ${analysis.repeatedLatestNumbers.join(", ") || "없음"}</span>
                   </div>
-                ` : `
-                  <p class="warning">이 번호가 포함된 과거 회차의 다음 회차 표본이 아직 충분하지 않습니다.</p>
-                `}
+                ` : ""}
               </article>
             `;
           }).join("")}
@@ -1822,111 +1614,100 @@
     function renderSignificancePanel(data) {
       const panel = document.querySelector("#significancePanel");
       if (data.draws.length === 0) {
-        panel.innerHTML = "<h2>세부 통계</h2><p>데이터를 먼저 불러와야 분석할 수 있습니다.</p>";
+        panel.innerHTML = "";
         return;
       }
       const patterns = findStatisticalPatterns(data.draws);
       const frequencyMax = Math.max(...patterns.numberFrequency.map((item) => item.observed), 1);
       const digitMax = Math.max(...patterns.lastDigits.digits.map((item) => item.recentCount), 1);
       const neighborMax = Math.max(...patterns.neighborFollowers.topNeighbors.map((item) => item.count), 1);
+      const { consecutive, structural, carryOver, neighborFollowers } = patterns;
+      const shareOfDraws = (count) => formatPercent(data.draws.length ? count / data.draws.length : 0);
+      const bar = (label, width, value) => `
+        <div class="mini-bar">
+          <strong>${label}</strong>
+          <div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div>
+          <span>${value}</span>
+        </div>`;
 
       panel.innerHTML = `
-        <h2>세부 통계</h2>
-        <p class="muted">로또 추첨은 독립 무작위 사건으로 보는 것이 맞습니다. 이 탭은 과거 데이터가 어떤 구조를 보였는지 정리하는 탐색 도구이며, 다음 회차 예측이나 당첨 가능성 상승을 의미하지 않습니다.</p>
-        <p class="warning">많은 후보를 동시에 비교하면 우연히 유의해 보이는 결과가 생길 수 있습니다.</p>
+        <div class="section-head">
+          <h2>세부 통계</h2>
+        </div>
         <div class="grid">
           <div class="metric">
             <h3>번호 출현 편차</h3>
-            <div class="mini-bars">${patterns.numberFrequency.map((item) => `
-              <div class="mini-bar">
-                <strong>${item.number}번</strong>
-                <div class="bar-track"><div class="bar-fill" style="width:${(item.observed / frequencyMax) * 100}%"></div></div>
-                <span>${item.observed}회 · ${item.label}</span>
-              </div>
-            `).join("")}</div>
+            <div class="mini-bars">${patterns.numberFrequency.map((item) =>
+              bar(`${item.number}번`, (item.observed / frequencyMax) * 100, `${item.observed}회 · ${item.label}`)).join("")}</div>
           </div>
           <div class="metric">
             <h3>번호 쌍 동시 출현</h3>
-            ${patterns.pairCooccurrence.length ? patterns.pairCooccurrence.map((item) => `
-              <p>${item.pair.join("-")} · ${item.observed}회 · ${item.label}</p>
-            `).join("") : "<p>표본이 부족합니다.</p>"}
+            ${patterns.pairCooccurrence.length
+              ? renderKeyValues(patterns.pairCooccurrence.map((item) => [item.pair.join("-"), `${item.observed}회 · ${item.label}`]))
+              : `<span class="stat-pill">표본 부족</span>`}
           </div>
         </div>
-        <div class="grid" style="margin-top:12px;">
+        <div class="grid">
           <div class="metric">
-            <h3>이웃수 패턴</h3>
-            <p>기준 회차 ${patterns.neighborFollowers.baseCount}개 중 다음 회차에 이웃수(±1)가 나온 회차: ${patterns.neighborFollowers.matchedNextDrawCount}회 (${formatPercent(patterns.neighborFollowers.hitRate)})</p>
-            ${patterns.neighborFollowers.topNeighbors.length ? `
-              <div class="mini-bars" style="margin-top:12px;">${patterns.neighborFollowers.topNeighbors.map((item) => `
-                <div class="mini-bar">
-                  <strong>${item.number}번</strong>
-                  <div class="bar-track"><div class="bar-fill" style="width:${neighborMax ? (item.count / neighborMax) * 100 : 0}%"></div></div>
-                  <span>${item.count}회</span>
-                </div>
-              `).join("")}</div>
-            ` : "<p class=\"muted\">이웃수로 집계된 번호가 없습니다.</p>"}
-            <p class="muted">정의: 어떤 회차의 당첨번호에 대해 ±1 번호가 다음 회차 메인 번호 6개 안에 등장했는지 집계합니다.</p>
-          </div>
-          <div class="metric">
-            <h3>끝수 패턴</h3>
-            <div class="mini-bars">${patterns.lastDigits.digits.map((item) => `
-              <div class="mini-bar">
-                <strong>${item.digit}끝</strong>
-                <div class="bar-track"><div class="bar-fill" style="width:${digitMax ? (item.recentCount / digitMax) * 100 : 0}%"></div></div>
-                <span>최근 ${item.recentCount}회 · 최근 비율 ${formatPercent(item.recentShare)}</span>
-              </div>
-            `).join("")}</div>
-            <p class="muted">최근 5회 번호 칸 기준 비율입니다. 전체 누적 비율과의 차이로 본 최근 강세: ${patterns.lastDigits.recentStrongDigits.map((item) => `${item.digit}끝 ${formatPercent(item.delta)}`).join(", ")}</p>
-          </div>
-          <div class="metric">
-            <h3>연번 등장 확률</h3>
-            <p>이번 회차 추정 연번 등장 확률: ${formatPercent(patterns.consecutive.estimatedNextRate)}</p>
-            <p>전체 회차 기준 연번(2개 이상 연속 번호) 등장 확률: ${formatPercent(patterns.consecutive.overallTwoPlusRate)}</p>
-            <p>최근 ${patterns.consecutive.recentLimit}회 기준 연번 등장 확률: ${formatPercent(patterns.consecutive.recentTwoPlusRate)}</p>
-            <p>전체 평균 대비 최근 흐름 배수: ${patterns.consecutive.trendRatio ? `${patterns.consecutive.trendRatio.toFixed(2)}배` : "비교 불가"}</p>
-            <p>3연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.threePlus / data.draws.length : 0)}</p>
-            <p>4연번 이상 등장 확률: ${formatPercent(data.draws.length ? patterns.consecutive.summary.fourPlus / data.draws.length : 0)}</p>
-            <p class="muted">이번 회차 추정치는 전체 평균 대비 최근 ${patterns.consecutive.recentLimit}회 흐름 비율을 반영한 값입니다. 이론 확률이 아니라 과거 회차 비율 기반 추정치입니다.</p>
-          </div>
-          <div class="metric">
-            <h3>합계 구조</h3>
-            <p>합계 평균 ${patterns.structural.averageSum.toFixed(1)}</p>
-            <p>합계 범위 ${patterns.structural.minSum}~${patterns.structural.maxSum}</p>
-            <p>연번 포함률 ${formatPercent(patterns.structural.consecutiveRate)}</p>
-          </div>
-        </div>
-        <div class="grid" style="margin-top:12px;">
-          <div class="metric">
-            <h3>이월수 (직전 회차 재출현)</h3>
-            <p>직전 회차 번호가 1개 이상 다시 나온 회차: ${formatPercent(patterns.carryOver.atLeastOneRate)} (이론값 ${formatPercent(patterns.carryOver.expectedAtLeastOneRate)})</p>
-            <p>평균 겹침 개수: ${patterns.carryOver.averageOverlap.toFixed(2)}개 (이론값 0.80개)</p>
-            <p>분포: 0개 ${patterns.carryOver.distribution[0]}회 · 1개 ${patterns.carryOver.distribution[1]}회 · 2개 ${patterns.carryOver.distribution[2]}회 · 3개 이상 ${patterns.carryOver.distribution[3]}회</p>
-            ${patterns.carryOver.latestNumbers.length ? `
-              <p class="muted" style="margin-top:10px;">이번 주 이월 후보 (최신 회차 번호)</p>
-              ${renderBalls(patterns.carryOver.latestNumbers)}
+            <h3>이웃수(±1) 패턴</h3>
+            ${renderKeyValues([
+              ["기준 회차", `${neighborFollowers.baseCount}개`],
+              ["다음 회차 등장", `${neighborFollowers.matchedNextDrawCount}회 (${formatPercent(neighborFollowers.hitRate)})`]
+            ])}
+            ${neighborFollowers.topNeighbors.length ? `
+              <div class="mini-bars">${neighborFollowers.topNeighbors.map((item) =>
+                bar(`${item.number}번`, (item.count / neighborMax) * 100, `${item.count}회`)).join("")}</div>
             ` : ""}
           </div>
           <div class="metric">
-            <h3>구간 분포</h3>
-            <div class="mini-bars">${patterns.zoneDistribution.zones.map((zone) => `
-              <div class="mini-bar">
-                <strong>${zone.label}</strong>
-                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (zone.recentPerDraw / 6) * 100 * 3)}%"></div></div>
-                <span>최근 평균 ${zone.recentPerDraw.toFixed(2)}개 · 전체 ${zone.overallPerDraw.toFixed(2)}개 · 이론 ${zone.expectedPerDraw.toFixed(2)}개</span>
-              </div>
-            `).join("")}</div>
-            <p class="muted">회차당 6개 번호가 각 구간에 평균 몇 개씩 나왔는지 봅니다. 최근은 ${patterns.zoneDistribution.recentLimit}회 기준입니다.</p>
+            <h3>끝수 패턴 (최근 5회)</h3>
+            <div class="mini-bars">${patterns.lastDigits.digits.map((item) =>
+              bar(`${item.digit}끝`, digitMax ? (item.recentCount / digitMax) * 100 : 0, `${item.recentCount}회 · ${formatPercent(item.recentShare)}`)).join("")}</div>
+            <div class="stat-pills">${patterns.lastDigits.recentStrongDigits.map((item) => `<span class="stat-pill">${item.digit}끝 ${formatPercent(item.delta)}</span>`).join("")}</div>
+          </div>
+          <div class="metric">
+            <h3>연번 등장 확률</h3>
+            ${renderKeyValues([
+              ["이번 회차 추정", formatPercent(consecutive.estimatedNextRate)],
+              ["전체 회차", formatPercent(consecutive.overallTwoPlusRate)],
+              [`최근 ${consecutive.recentLimit}회`, formatPercent(consecutive.recentTwoPlusRate)],
+              ["최근 흐름 배수", consecutive.trendRatio ? `${consecutive.trendRatio.toFixed(2)}배` : "-"],
+              ["3연번 이상", shareOfDraws(consecutive.summary.threePlus)],
+              ["4연번 이상", shareOfDraws(consecutive.summary.fourPlus)]
+            ])}
+          </div>
+          <div class="metric">
+            <h3>합계 구조</h3>
+            ${renderKeyValues([
+              ["합계 평균", structural.averageSum.toFixed(1)],
+              ["합계 범위", `${structural.minSum}~${structural.maxSum}`],
+              ["연번 포함률", formatPercent(structural.consecutiveRate)]
+            ])}
+          </div>
+        </div>
+        <div class="grid">
+          <div class="metric">
+            <h3>이월수</h3>
+            ${renderKeyValues([
+              ["1개 이상 재출현", `${formatPercent(carryOver.atLeastOneRate)} (이론 ${formatPercent(carryOver.expectedAtLeastOneRate)})`],
+              ["평균 겹침", `${carryOver.averageOverlap.toFixed(2)}개 (이론 0.80개)`],
+              ["0개", `${carryOver.distribution[0]}회`],
+              ["1개", `${carryOver.distribution[1]}회`],
+              ["2개", `${carryOver.distribution[2]}회`],
+              ["3개 이상", `${carryOver.distribution[3]}회`]
+            ])}
+            ${carryOver.latestNumbers.length ? renderBalls(carryOver.latestNumbers) : ""}
+          </div>
+          <div class="metric">
+            <h3>구간 분포 (최근 ${patterns.zoneDistribution.recentLimit}회)</h3>
+            <div class="mini-bars">${patterns.zoneDistribution.zones.map((zone) =>
+              bar(zone.label, Math.min(100, (zone.recentPerDraw / 6) * 100 * 3),
+                `${zone.recentPerDraw.toFixed(2)} · 전체 ${zone.overallPerDraw.toFixed(2)} · 이론 ${zone.expectedPerDraw.toFixed(2)}`)).join("")}</div>
           </div>
           <div class="metric">
             <h3>미출현 기간</h3>
-            <div class="mini-bars">${patterns.numberGaps.longestAbsent.map((item) => `
-              <div class="mini-bar">
-                <strong>${item.number}번</strong>
-                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (item.gap / 30) * 100)}%"></div></div>
-                <span>${item.gap}회째 미출현</span>
-              </div>
-            `).join("")}</div>
-            <p class="muted">이론상 한 번호의 평균 재출현 주기는 ${patterns.numberGaps.averageExpectedGap.toFixed(1)}회입니다. 오래 안 나온 번호가 다음에 나올 확률이 높아지는 것은 아닙니다.</p>
+            <div class="mini-bars">${patterns.numberGaps.longestAbsent.map((item) =>
+              bar(`${item.number}번`, Math.min(100, (item.gap / 30) * 100), `${item.gap}회`)).join("")}</div>
           </div>
         </div>
       `;
@@ -1956,7 +1737,7 @@
                   <td>${draw.round}</td>
                   <td>${draw.date || "-"}</td>
                   <td>${renderBalls(draw.numbers)}</td>
-                  <td>${draw.bonus}</td>
+                  <td>${renderBalls([draw.bonus])}</td>
                   <td>${draw.firstWinnerCount}명</td>
                   <td>${formatCurrency(draw.firstPrizeAmount)}원</td>
                 </tr>
@@ -1998,20 +1779,17 @@
     async function loadAppData() {
       const button = document.querySelector("#refreshButton");
       button.disabled = true;
-      renderApp(appState, drawData, { title: "데이터 로딩 중", message: "lotto-data.json을 읽고 있습니다." });
+      renderApp(appState, drawData, { title: "데이터 로딩 중" });
 
       try {
         drawData = await loadDrawData();
         lstmPrediction = await loadLstmPrediction();
         lstmHistory = await loadLstmHistory();
-        renderApp(appState, drawData, {
-          title: "데이터 로드 완료",
-          message: `${drawData.draws.length}개 회차를 불러왔습니다.`
-        });
+        renderApp(appState, drawData, { title: "데이터 로드 완료" });
       } catch (error) {
         console.warn("data_load_failed", error);
         renderApp(appState, drawData, {
-          title: "데이터 로드 실패",
+          failed: true,
           message: "lotto-data.json을 읽지 못했습니다. 파일이 있는지 확인하고, 필요하면 이 폴더를 로컬 서버로 열어주세요."
         });
       } finally {

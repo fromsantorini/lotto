@@ -8,8 +8,8 @@ assert.ok(script, "page script missing");
 const panels = new Map();
 let data;
 const api = runInNewContext(`${script}\n({ loadLstmPrediction, renderBacktestRecommendations,
-  renderMethodComparison, renderLstmScoreboard, renderRecommendations,
-  buildRecommendationReasonSummary, finiteNumber, predictTransitionSet,
+  renderMethodComparison, renderBacktestMetrics, renderLstmScoreboard, renderRecommendations,
+  finiteNumber, predictTransitionSet,
   analyzeLatestNumberFollowers, renderBriefing,
   setPrediction(value) { lstmPrediction = value; } })`, {
   localStorage: { getItem: () => null },
@@ -27,8 +27,8 @@ assert.equal(api.finiteNumber(null), null);
 assert.equal(api.finiteNumber(""), null);
 assert.equal(api.finiteNumber(Infinity), null);
 assert.equal(api.finiteNumber(0), 0);
-assert.match(api.renderBacktestRecommendations(null), /대기 중/);
-assert.match(api.renderMethodComparison(null), /재학습 후/);
+assert.equal(api.renderBacktestRecommendations(null), "");
+assert.equal(api.renderMethodComparison(null), "");
 
 // Independent one-step prediction: A -> B -> A should select B, never the bonus.
 const groupA = [1, 2, 3, 4, 5, 6];
@@ -77,7 +77,7 @@ assert.ok(liveTransition.numbers.every((number) => Number.isInteger(number) && n
 api.renderRecommendations({}, drawData);
 const independentPanel = panels.get("#recommendPanel").innerHTML;
 assert.match(independentPanel, /전체 1세트/);
-assert.match(independentPanel, new RegExp(`${liveTransition.targetRound}회 대상`));
+assert.match(independentPanel, new RegExp(`${liveTransition.targetRound}회 추천 번호`));
 assert.equal((independentPanel.match(/class="recommendation-card"/g) || []).length, 1);
 assert.doesNotMatch(independentPanel, /NaN|undefined/);
 assert.match(independentPanel, new RegExp(`평가 ${liveTransition.evaluation.testedRounds.toLocaleString()}회`));
@@ -95,20 +95,16 @@ assert.equal(walkForward.testedRounds, replayed.length);
 assert.equal(walkForward.meanMatches, replayed.reduce((a, b) => a + b, 0) / replayed.length);
 assert.equal(walkForward.threePlusRate, replayed.filter((count) => count >= 3).length / replayed.length);
 api.renderRecommendations({}, { draws: early.slice(0, 100) });
-assert.match(panels.get("#recommendPanel").innerHTML, /예측력은 검증되지 않았습니다/);
+assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /이론 대비 차이/);
 console.log(`Transition prediction for round ${liveTransition.targetRound}: ${liveTransition.numbers.join(", ")}`);
 
 const current = JSON.parse(readFileSync(new URL("../lstm-prediction.json", import.meta.url), "utf8"));
 data = structuredClone(current);
 delete data.comparison;
-data.validationAuc = null;
 data.backtest = { selectedMethod: "uniform", meanMatches: null };
-data.recommendations[0].modelScore = null;
 let prediction = await api.loadLstmPrediction();
-assert.equal(prediction.validationAuc, null);
 assert.equal(prediction.backtest.randomBaseline, null);
-assert.equal(prediction.recommendations[0].modelScore, null);
-assert.match(api.renderBacktestRecommendations(prediction), /별도 검증 성적이 아닙니다/);
+assert.doesNotMatch(api.renderBacktestMetrics(prediction), /NaN|undefined/);
 assert.doesNotMatch(api.renderBacktestRecommendations(prediction), /NaN|undefined/);
 
 data.comparison = {
@@ -131,17 +127,13 @@ const comparison = api.renderMethodComparison(prediction);
 assert.match(comparison, /1118~1240회/);
 assert.match(comparison, /0\.810개/);
 assert.match(comparison, /-0\.020 ~ 0\.040/);
-assert.match(comparison, /우위 미확인/);
-assert.match(comparison, /이 구간에서 양의 차이 관측/);
-assert.match(comparison, /가중치는 고정/);
 assert.doesNotMatch(comparison, /NaN|undefined|<img/);
-const backtest = api.renderBacktestRecommendations(prediction);
-assert.match(backtest, /이전 성적으로 방식을 선택한 뒤 다음 회차/);
-assert.match(backtest, /선택 전략 평균/);
+const backtest = api.renderBacktestMetrics(prediction);
+assert.match(backtest, /평가 990회/);
 assert.doesNotMatch(backtest, /NaN|undefined/);
 data.comparison.testedRounds = 1;
 data.comparison.methods[2].differenceCI95 = [null, 0.03];
-assert.doesNotMatch(api.renderMethodComparison(await api.loadLstmPrediction()), /이 구간에서 양의 차이 관측/);
+assert.match(api.renderMethodComparison(await api.loadLstmPrediction()), /<td>-<\/td>/);
 
 data = current;
 prediction = await api.loadLstmPrediction();
@@ -149,6 +141,7 @@ assert.ok(prediction);
 api.setPrediction(prediction);
 api.renderRecommendations({}, drawData);
 assert.match(panels.get("#recommendPanel").innerHTML, new RegExp(`전체 ${prediction.recommendations.length + 1}세트`));
+assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /<p[ >]/);
 assert.equal(JSON.stringify(api.predictTransitionSet(drawData.draws)), JSON.stringify(liveTransition));
 api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{ numbers: [1, 2, 3, 4, 5, 6] }] });
 assert.doesNotMatch(panels.get("#recommendPanel").innerHTML, /NaN|undefined/);
@@ -169,9 +162,8 @@ const transitionScores = history.entries.filter((entry) => entry.result).map((en
   return entry.result.matches[index].matchCount;
 });
 const transitionMean = (transitionScores.reduce((a, b) => a + b, 0) / transitionScores.length).toFixed(2);
-assert.match(scoreboard, new RegExp(`회차 전이 평균 ${transitionMean}개 · ${transitionScores.length}세트`));
-assert.match(api.renderMethodComparison(prediction), /^\s*<details[^>]*><summary>동일 조건 추천 비교<\/summary>/);
-assert.match(api.buildRecommendationReasonSummary({ method: "weighted-statistical-v2" }), /번호당 1/);
+assert.match(scoreboard, new RegExp(`회차 전이</span><strong>${transitionMean}</strong><small>${transitionScores.length}세트`));
+assert.match(api.renderMethodComparison(prediction), /동일 조건 비교/);
 
 // 기존 JSON과 상태유지 모델 JSON 모두 표시하며 누락/오염 점수는 숨긴다.
 data = structuredClone(current);
@@ -188,12 +180,10 @@ prediction = await api.loadLstmPrediction();
 api.setPrediction(prediction);
 api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{}] });
 const statefulPanel = panels.get("#recommendPanel").innerHTML;
-assert.match(statefulPanel, /128유닛 상태유지 LSTM/);
-assert.match(statefulPanel, /100에포크 학습/);
-assert.match(statefulPanel, /원문 방식 v3/);
+assert.match(statefulPanel, /100에포크/);
 assert.match(statefulPanel, /<td>0\.990000<\/td><td>100<\/td>/);
 assert.match(statefulPanel, /<td>0\.200000<\/td><td>21<\/td>/);
-assert.match(api.renderMethodComparison(prediction), /원문 방식 v3/);
+assert.match(api.renderMethodComparison(prediction), /<th scope="row">LSTM<\/th>/);
 assert.doesNotMatch(statefulPanel, /NaN|undefined/);
 data.numberScores[1] = null;
 assert.equal((await api.loadLstmPrediction()).numberScores, null);
