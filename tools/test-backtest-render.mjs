@@ -130,7 +130,17 @@ assert.match(comparison, /-0\.020 ~ 0\.040/);
 assert.doesNotMatch(comparison, /NaN|undefined|<img/);
 const backtest = api.renderBacktestMetrics(prediction);
 assert.match(backtest, /평가 990회/);
+assert.match(backtest, /무작위 0\.800개/);
 assert.doesNotMatch(backtest, /NaN|undefined/);
+data.backtest = { ...data.backtest, metric: "three-plus-rate-per-set",
+  threePlusRate: 0.024, randomBaseline: 0.025, differenceVsRandom: -0.001,
+  differenceCI95: [-0.002, 0.001], uniformRounds: 900 };
+const rateReport = api.renderBacktestMetrics(await api.loadLstmPrediction());
+assert.match(rateReport, /세트당 3개 이상 적중률 2\.40%/);
+assert.match(rateReport, /무작위 적중률 2\.50%/);
+assert.match(rateReport, /적중률 차이 -0\.10%p/);
+assert.match(rateReport, /95% 구간 -0\.20 ~ 0\.10%p/);
+assert.match(rateReport, /무작위 선택 900회/);
 data.comparison.testedRounds = 1;
 data.comparison.methods[2].differenceCI95 = [null, 0.03];
 assert.match(api.renderMethodComparison(await api.loadLstmPrediction()), /<td>-<\/td>/);
@@ -138,6 +148,10 @@ assert.match(api.renderMethodComparison(await api.loadLstmPrediction()), /<td>-<
 data = current;
 prediction = await api.loadLstmPrediction();
 assert.ok(prediction);
+const patternCards = api.renderBacktestRecommendations(prediction);
+assert.match(patternCards, /패턴 점수 백테스트/);
+assert.equal((patternCards.match(/class="recommendation-card"/g) || []).length, 1);
+assert.match(api.renderBacktestMetrics(prediction), /선택 패턴 점수/);
 api.setPrediction(prediction);
 api.renderRecommendations({}, drawData);
 assert.match(panels.get("#recommendPanel").innerHTML, new RegExp(`전체 ${prediction.recommendations.length + 1}세트`));
@@ -153,6 +167,8 @@ assert.doesNotMatch(scoreboard, /NaN|undefined/);
 // 회차 전이는 이력에 고정된 번호로 채점하고, 다음 회차 기록은 화면의 예측과 같아야 한다.
 const isTransition = (item) => item.method === "round-transition";
 const pendingTransition = history.entries.find((entry) => entry.targetRound === liveTransition.targetRound);
+const backtestSets = (recs) => recs.filter((r) => r.method.startsWith("walk-forward-backtest"));
+assert.deepEqual(backtestSets(pendingTransition.recommendations), backtestSets(current.recommendations));
 assert.deepEqual(pendingTransition.recommendations.find(isTransition).numbers, Array.from(liveTransition.numbers));
 const transitionScores = history.entries.filter((entry) => entry.result).map((entry) => {
   const index = entry.recommendations.findIndex(isTransition);

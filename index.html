@@ -542,10 +542,11 @@
       return finiteNumber(value) === null ? "-" : value.toFixed(digits);
     }
 
-    function evaluationInterval(interval) {
+    function evaluationInterval(interval, asRateDifference = false) {
       return Array.isArray(interval) && interval.length === 2
         && interval.every((value) => finiteNumber(value) !== null) && interval[0] <= interval[1]
-        ? interval.map((value) => value.toFixed(3)).join(" ~ ") : "-";
+        ? interval.map((value) => asRateDifference ? (100 * value).toFixed(2) : value.toFixed(3)).join(" ~ ")
+          + (asRateDifference ? "%p" : "") : "-";
     }
 
     async function loadLstmPrediction() {
@@ -584,7 +585,9 @@
             && Array.isArray(data.comparison.methods) ? data.comparison : null,
           backtest: data.backtest && typeof data.backtest === "object" ? {
             metric: String(data.backtest.metric || ""),
+            uniformRounds: finiteNumber(data.backtest.uniformRounds),
             threePlusRate: finiteNumber(data.backtest.threePlusRate),
+            differenceVsRandom: finiteNumber(data.backtest.differenceVsRandom),
             differenceCI95: data.backtest.differenceCI95,
             testedRounds: Number(data.backtest.testedRounds || 0),
             selectedMethod: String(data.backtest.selectedMethod || "uniform"),
@@ -1165,7 +1168,7 @@
       "round-transition",
       "lstm-stateful-ball-weighted-v3",
       "weighted-statistical-v2",
-      "walk-forward-backtest-v2"
+      "walk-forward-backtest-pattern-v1"
     ];
 
     function renderMatchBadge(match) {
@@ -1313,7 +1316,9 @@
       if (method === "lstm-stateful-ball-weighted-v3") return "LSTM";
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
       if (method === "weighted-statistical-v2") return "통계";
-      if (method === "walk-forward-backtest-v2") return "백테스트";
+      if (method === "walk-forward-backtest-v2") return "백테스트 (평균 적중)";
+      if (method === "walk-forward-backtest-v3") return "백테스트 (3개 이상 적중률)";
+      if (method === "walk-forward-backtest-pattern-v1") return "패턴 점수";
       if (method === "round-transition") return "회차 전이";
       if (method === "lstm-combination-best") return "LSTM 최고 점수 조합";
       if (method === "lstm-combination-diverse") return "LSTM 다양성 조합";
@@ -1373,14 +1378,17 @@
 
     function renderBacktestRecommendations(prediction) {
       return prediction
-        ? renderRecommendationGroup("백테스트", prediction.recommendations.filter((rec) => rec.method.startsWith("walk-forward-backtest")))
+        ? renderRecommendationGroup(prediction.backtest?.selectedMethod === "pattern-score" ? "패턴 점수 백테스트" : "백테스트",
+          prediction.recommendations.filter((rec) => rec.method.startsWith("walk-forward-backtest")))
         : "";
     }
 
     function renderBacktestMetrics(prediction) {
       const summary = prediction?.backtest;
       if (!summary) return "";
-      const selected = summary.selectedMethod === "uniform"
+      const byHitRate = summary.metric === "three-plus-rate-per-set";
+      const selected = summary.selectedMethod === "pattern-score" ? "패턴 점수"
+        : summary.selectedMethod === "uniform"
         ? "균등 무작위"
         : summary.selectedMethod === "frequency-all"
           ? "전체 누적 빈도"
@@ -1391,11 +1399,15 @@
         <h3>백테스트</h3>
         <div class="stat-pills">
           <span class="stat-pill">선택 ${selected}</span>
-          <span class="stat-pill">평균 ${evaluationNumber(summary.meanMatches)}개</span>
-          <span class="stat-pill">무작위 ${evaluationNumber(summary.randomBaseline)}개</span>
-          <span class="stat-pill">3개 이상 ${evaluationPercent(summary.threePlusRate)}</span>
-          <span class="stat-pill">무작위 대비 95% 구간 ${evaluationInterval(summary.differenceCI95)}</span>
+          <span class="stat-pill">세트당 3개 이상 적중률 ${evaluationPercent(summary.threePlusRate)}</span>
+          ${byHitRate ? `
+            <span class="stat-pill">무작위 적중률 ${evaluationPercent(summary.randomBaseline)}</span>
+            <span class="stat-pill">적중률 차이 ${summary.differenceVsRandom === null ? "-" : (100 * summary.differenceVsRandom).toFixed(2) + "%p"}</span>` : `
+            <span class="stat-pill">평균 ${evaluationNumber(summary.meanMatches)}개</span>
+            <span class="stat-pill">무작위 ${evaluationNumber(summary.randomBaseline)}개</span>`}
+          <span class="stat-pill">무작위 대비 95% 구간 ${evaluationInterval(summary.differenceCI95, byHitRate)}</span>
           <span class="stat-pill">평가 ${summary.testedRounds.toLocaleString()}회</span>
+          ${byHitRate && summary.uniformRounds !== null ? `<span class="stat-pill">무작위 선택 ${summary.uniformRounds.toLocaleString()}회</span>` : ""}
         </div>`;
     }
 

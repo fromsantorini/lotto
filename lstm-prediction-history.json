@@ -122,58 +122,14 @@
           }
         },
         {
-          "method": "walk-forward-backtest-v2",
+          "method": "walk-forward-backtest-pattern-v1",
           "numbers": [
-            2,
-            8,
-            9,
-            19,
-            25,
-            34
-          ]
-        },
-        {
-          "method": "walk-forward-backtest-v2",
-          "numbers": [
-            4,
-            14,
-            23,
-            37,
-            38,
-            43
-          ]
-        },
-        {
-          "method": "walk-forward-backtest-v2",
-          "numbers": [
-            10,
-            17,
             18,
+            22,
             23,
-            32,
-            44
-          ]
-        },
-        {
-          "method": "walk-forward-backtest-v2",
-          "numbers": [
-            12,
-            21,
-            23,
-            24,
-            27,
-            33
-          ]
-        },
-        {
-          "method": "walk-forward-backtest-v2",
-          "numbers": [
-            15,
+            25,
             28,
-            31,
-            37,
-            40,
-            44
+            32
           ]
         },
         {
