@@ -2,6 +2,151 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "targetRound": 1252,
+      "sourceLatestRound": 1251,
+      "trainedAt": "2026-11-21T20:24:19Z",
+      "model": "keras-stateful-lstm-tykimos-v3",
+      "recommendations": [
+        {
+          "method": "lstm-stateful-ball-weighted-v3",
+          "numbers": [
+            2,
+            9,
+            24,
+            33,
+            36,
+            37
+          ]
+        },
+        {
+          "method": "lstm-stateful-ball-weighted-v3",
+          "numbers": [
+            6,
+            25,
+            31,
+            33,
+            36,
+            37
+          ]
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            4,
+            13,
+            15,
+            16,
+            29,
+            30
+          ],
+          "reason": {
+            "oddEven": "3:3",
+            "lowHigh": "4:2",
+            "sum": 107,
+            "frequentNumbers": [
+              13,
+              16
+            ],
+            "coldNumbers": [],
+            "carryOverNumbers": [
+              29
+            ],
+            "endingNumbers": [],
+            "consecutiveRuns": [
+              [
+                15,
+                16
+              ],
+              [
+                29,
+                30
+              ]
+            ]
+          }
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            10,
+            13,
+            16,
+            27,
+            31,
+            34
+          ],
+          "reason": {
+            "oddEven": "3:3",
+            "lowHigh": "3:3",
+            "sum": 131,
+            "frequentNumbers": [
+              13,
+              16,
+              27,
+              31
+            ],
+            "coldNumbers": [
+              10,
+              34
+            ],
+            "carryOverNumbers": [],
+            "endingNumbers": [],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "weighted-statistical-v2",
+          "numbers": [
+            12,
+            15,
+            19,
+            25,
+            29,
+            41
+          ],
+          "reason": {
+            "oddEven": "5:1",
+            "lowHigh": "3:3",
+            "sum": 141,
+            "frequentNumbers": [
+              25
+            ],
+            "coldNumbers": [
+              41
+            ],
+            "carryOverNumbers": [
+              19,
+              29
+            ],
+            "endingNumbers": [],
+            "consecutiveRuns": []
+          }
+        },
+        {
+          "method": "walk-forward-backtest-pattern-v1",
+          "numbers": [
+            14,
+            22,
+            31,
+            35,
+            40,
+            45
+          ]
+        },
+        {
+          "method": "round-transition",
+          "numbers": [
+            12,
+            18,
+            24,
+            34,
+            39,
+            45
+          ]
+        }
+      ],
+      "result": null
+    },
+    {
       "targetRound": 1251,
       "sourceLatestRound": 1250,
       "trainedAt": "2026-11-14T18:57:24Z",
@@ -144,7 +289,55 @@
           ]
         }
       ],
-      "result": null
+      "result": {
+        "date": "2026-11-21",
+        "winningNumbers": [
+          14,
+          18,
+          19,
+          29,
+          40,
+          45
+        ],
+        "bonus": 1,
+        "matches": [
+          {
+            "method": "lstm-stateful-ball-weighted-v3",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "lstm-stateful-ball-weighted-v3",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 0,
+            "bonusMatched": true
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "weighted-statistical-v2",
+            "matchCount": 0,
+            "bonusMatched": false
+          },
+          {
+            "method": "walk-forward-backtest-pattern-v1",
+            "matchCount": 1,
+            "bonusMatched": false
+          },
+          {
+            "method": "round-transition",
+            "matchCount": 0,
+            "bonusMatched": false
+          }
+        ]
+      }
     },
     {
       "targetRound": 1250,
