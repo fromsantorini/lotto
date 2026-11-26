@@ -4,28 +4,50 @@
     {
       "targetRound": 1252,
       "sourceLatestRound": 1251,
-      "trainedAt": "2026-11-21T20:24:19Z",
+      "trainedAt": "2026-11-26T08:41:33Z",
       "model": "keras-stateful-lstm-tykimos-v3",
       "recommendations": [
         {
           "method": "lstm-stateful-ball-weighted-v3",
           "numbers": [
-            2,
-            9,
+            6,
+            19,
+            20,
             24,
-            33,
-            36,
+            31,
             37
           ]
         },
         {
           "method": "lstm-stateful-ball-weighted-v3",
           "numbers": [
-            6,
+            19,
+            20,
             25,
+            28,
             31,
-            33,
-            36,
+            37
+          ]
+        },
+        {
+          "method": "lstm-refit-25-v1",
+          "numbers": [
+            2,
+            10,
+            16,
+            34,
+            37,
+            42
+          ]
+        },
+        {
+          "method": "lstm-refit-25-v1",
+          "numbers": [
+            10,
+            12,
+            16,
+            22,
+            24,
             37
           ]
         },
