@@ -208,7 +208,8 @@ prediction = await api.loadLstmPrediction();
 api.setPrediction(prediction);
 api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{}] });
 const refitGroup = panels.get("#recommendPanel").innerHTML.match(/<h3>LSTM 25회 재학습[\s\S]*?<\/section>/)?.[0];
-assert.equal((refitGroup?.match(/class="recommendation-card"/g) || []).length, 1);
+assert.equal((refitGroup?.match(/class="recommendation-card"/g) || []).length,
+  data.recommendations.filter((rec) => rec.method === "lstm-refit-25-v1").length);
 assert.match(api.renderMethodComparison(prediction), /<th scope="row">LSTM 25회 재학습<\/th>/);
 data.numberScores[1] = null;
 assert.equal((await api.loadLstmPrediction()).numberScores, null);
