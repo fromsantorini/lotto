@@ -201,16 +201,17 @@ assert.match(statefulPanel, /<td>0\.990000<\/td><td>100<\/td>/);
 assert.match(statefulPanel, /<td>0\.200000<\/td><td>21<\/td>/);
 assert.match(api.renderMethodComparison(prediction), /<th scope="row">LSTM<\/th>/);
 assert.doesNotMatch(statefulPanel, /NaN|undefined/);
-// 25회 재학습 세트는 LSTM 묶음과 섞이지 않고 따로 표시된다.
+// 25회 단위 학습 세트는 LSTM 묶음과 섞이지 않고, 학습 마감 회차를 이름으로 표시한다.
 data.recommendations[1].method = "lstm-refit-25-v1";
+data.refitTrainedThroughRound = 1250;
 data.comparison.methods.push({ method: "lstm-refit-25-v1", meanMatches: 0.79 });
 prediction = await api.loadLstmPrediction();
 api.setPrediction(prediction);
 api.renderRecommendations({}, { latestRound: current.sourceLatestRound, draws: [{}] });
-const refitGroup = panels.get("#recommendPanel").innerHTML.match(/<h3>LSTM 25회 재학습[\s\S]*?<\/section>/)?.[0];
+const refitGroup = panels.get("#recommendPanel").innerHTML.match(/<h3>LSTM 1250회까지 학습[\s\S]*?<\/section>/)?.[0];
 assert.equal((refitGroup?.match(/class="recommendation-card"/g) || []).length,
   data.recommendations.filter((rec) => rec.method === "lstm-refit-25-v1").length);
-assert.match(api.renderMethodComparison(prediction), /<th scope="row">LSTM 25회 재학습<\/th>/);
+assert.match(api.renderMethodComparison(prediction), /<th scope="row">LSTM 25회 단위 학습<\/th>/);
 data.numberScores[1] = null;
 assert.equal((await api.loadLstmPrediction()).numberScores, null);
 console.log("recommendation render checks passed");

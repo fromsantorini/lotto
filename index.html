@@ -577,6 +577,7 @@
           trainedAt: data.trainedAt || null,
           stateful: data.stateful === true,
           epochs: finiteNumber(data.epochs),
+          refitTrainedThroughRound: finiteNumber(data.refitTrainedThroughRound),
           numberScores: Array.isArray(data.numberScores) && data.numberScores.length === 45
             && data.numberScores.every((score) => finiteNumber(score) !== null && score >= 0 && score <= 1)
             ? data.numberScores : null,
@@ -1315,7 +1316,7 @@
     function methodLabel(method) {
       if (method === "uniform") return "균등 무작위";
       if (method === "lstm-stateful-ball-weighted-v3") return "LSTM";
-      if (method === "lstm-refit-25-v1") return "LSTM 25회 재학습";
+      if (method === "lstm-refit-25-v1") return "LSTM 25회 단위 학습";
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
       if (method === "weighted-statistical-v2") return "통계";
       if (method === "walk-forward-backtest-v2") return "백테스트 (평균 적중)";
@@ -1352,7 +1353,8 @@
       const tag = isStale ? `<span class="stat-pill warn">${prediction.sourceLatestRound}회 기준</span>` : "";
       return renderRecommendationGroup("LSTM",
         prediction.recommendations.filter((rec) => rec.method.startsWith("lstm") && rec.method !== "lstm-refit-25-v1"), tag)
-        + renderRecommendationGroup(methodLabel("lstm-refit-25-v1"),
+        + renderRecommendationGroup(prediction.refitTrainedThroughRound === null
+            ? methodLabel("lstm-refit-25-v1") : `LSTM ${prediction.refitTrainedThroughRound}회까지 학습`,
           prediction.recommendations.filter((rec) => rec.method === "lstm-refit-25-v1"), tag);
     }
 
