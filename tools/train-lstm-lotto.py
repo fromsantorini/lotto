@@ -36,6 +36,8 @@ MAX_CANDIDATE_ATTEMPT_FACTOR = 100
 
 MODEL_NAME = "keras-stateful-lstm-tykimos-v3"
 LSTM_METHOD = "lstm-stateful-ball-weighted-v3"
+REFIT_METHOD = "lstm-refit-25-v1"
+REFIT_INTERVAL = 25  # 학습 마감 회차를 25의 배수로 고정해 실전과 평가가 같은 주기로 재학습
 REFERENCE_URL = "https://tykimos.github.io/2020/01/25/keras_lstm_lotto_v895/"
 WARNING = (
     "번호별 모델 점수는 추천 가중치이며 조합의 당첨 확률이 아닙니다. "
@@ -481,6 +483,16 @@ def chronological_split(sample_count: int) -> tuple[int, int]:
     return train_end, test_start
 
 
+def refit_cutoff(target_round: int) -> int:
+    """target_round 예측에 쓰는 모델의 학습 마감 회차. target_round 이전의 25의 배수."""
+    return (target_round - 1) // REFIT_INTERVAL * REFIT_INTERVAL
+
+
+def refit_train_count(rounds: np.ndarray, cutoff: int) -> int:
+    """정답 회차가 cutoff 이하인 학습 샘플 수. 샘플 i의 정답은 rounds[i + 1]."""
+    return int(np.searchsorted(rounds, cutoff, side="right")) - 1
+
+
 def round_rng(target_round: int, offset: int) -> np.random.Generator:
     """회차별 난수열. 고정 시드는 가중치가 비슷한 주마다 같은 조합을 반복한다."""
     return np.random.default_rng(SEED + offset + target_round * 100)
@@ -576,6 +588,11 @@ def selftest() -> int:
     # 원문의 공 박스와 가중치 변환이 동일한지 확인한다.
     box = np.repeat(np.arange(NUM_RANGE), ball_counts(scores))
     assert np.array_equal(np.bincount(box, minlength=NUM_RANGE), ball_counts(scores))
+    # 25회 재학습: 예측 대상 회차와 그 이후 회차는 학습 샘플에 들어가지 않는다.
+    assert [refit_cutoff(r) for r in (1250, 1251, 1252, 1276)] == [1225, 1250, 1250, 1275]
+    rounds = np.array([d["round"] for d in draws])
+    count = refit_train_count(rounds, refit_cutoff(251))
+    assert count == 249 and np.array_equal(y[count - 1], vectors[rounds.tolist().index(250)])
     print("selftest ok")
     return 0
 
@@ -651,6 +668,28 @@ def main() -> int:
         comparison_matches(draws, args.window + test_start + offset, weights)
         for offset, weights in enumerate(test_scores)
     ])
+    # 25회 재학습: 회차마다 마감 회차까지 처음부터 학습한 모델로 예측한다. 실전 추천도 같은 규칙.
+    # ponytail: 매주 마감 회차별 모델을 다시 학습(약 6회). 느려지면 마감별 가중치를 캐시.
+    rounds = np.array([d["round"] for d in draws])
+    test_targets = [int(r) for r in rounds[args.window + test_start:]]
+    live_cutoff = refit_cutoff(source_latest + 1)
+    refit_test = np.zeros_like(test_scores)
+    for cutoff in sorted({refit_cutoff(r) for r in test_targets} | {live_cutoff}):
+        count = refit_train_count(rounds, cutoff)
+        tf.keras.backend.clear_session()
+        tf.keras.utils.set_random_seed(SEED)
+        refit_model = build_number_model(tf, args.window)
+        fit_stateful(tf, refit_model, x[:count], y[:count], args.epochs)
+        replay = predict_stateful(refit_model, vectors[:, np.newaxis, :])
+        for offset, target in enumerate(test_targets):
+            if refit_cutoff(target) == cutoff:
+                refit_test[offset] = replay[test_start + offset]
+        if cutoff == live_cutoff:
+            refit_weights = replay[-1]
+    refit_matches = np.asarray([
+        comparison_matches(draws, args.window + test_start + offset, weights)[2]
+        for offset, weights in enumerate(refit_test)
+    ])
     comparison = {
         "evaluationMode": "chronological-stateful-holdout-v3",
         "model": MODEL_NAME,
@@ -668,7 +707,8 @@ def main() -> int:
         "methods": [
             {"method": method, **match_summary(matches[:, index], matches[:, 0])}
             for index, method in enumerate(("uniform", "weighted-statistical-v2", LSTM_METHOD))
-        ],
+        ] + [{"method": REFIT_METHOD, **match_summary(refit_matches, matches[:, 0])}],
+        "refitInterval": REFIT_INTERVAL,
     }
     # 최종 추천은 전체 회차로 동일한 epoch 수만큼 새로 학습한다.
     tf.keras.backend.clear_session()
@@ -681,9 +721,12 @@ def main() -> int:
     backtest, backtest_recs = build_backtest_recommendations(draws)
     reserved = {tuple(rec["numbers"]) for rec in backtest_recs}
     lstm = lstm_recommendations(weights, round_rng(source_latest + 1, 3), forbidden=historical | reserved)
-    selected = reserved | {tuple(rec["numbers"]) for rec in lstm}
+    reserved |= {tuple(rec["numbers"]) for rec in lstm}
+    refit = [{"method": REFIT_METHOD, "numbers": numbers} for numbers in generate_weighted_sets(
+        ball_counts(refit_weights), round_rng(source_latest + 1, 5), 2, historical | reserved)]
+    selected = reserved | {tuple(rec["numbers"]) for rec in refit}
     stats = stat_recommendations(draws, round_rng(source_latest + 1, 4), forbidden=selected)
-    recommendations = lstm + stats + backtest_recs
+    recommendations = lstm + refit + stats + backtest_recs
     number_sets = [set(rec["numbers"]) for rec in recommendations]
     if len({tuple(rec["numbers"]) for rec in recommendations}) != len(recommendations):
         raise ValueError("duplicate recommendation in bundle")
@@ -702,6 +745,7 @@ def main() -> int:
         "sampling": "int(score * 100 + 1)",
         "numberScores": [float(score) for score in weights],
         "ballCounts": ball_counts(weights).tolist(),
+        "refitTrainedThroughRound": live_cutoff,
         "trainSampleCount": len(x),
         "validationAuc": round(float(validation["auc"]), 4),
         "comparison": comparison,

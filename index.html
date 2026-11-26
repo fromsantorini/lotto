@@ -1167,6 +1167,7 @@
     const CURRENT_METHODS = [
       "round-transition",
       "lstm-stateful-ball-weighted-v3",
+      "lstm-refit-25-v1",
       "weighted-statistical-v2",
       "walk-forward-backtest-pattern-v1"
     ];
@@ -1314,6 +1315,7 @@
     function methodLabel(method) {
       if (method === "uniform") return "균등 무작위";
       if (method === "lstm-stateful-ball-weighted-v3") return "LSTM";
+      if (method === "lstm-refit-25-v1") return "LSTM 25회 재학습";
       if (method === "lstm-number-weighted-v2") return "LSTM 번호별 점수 v2";
       if (method === "weighted-statistical-v2") return "통계";
       if (method === "walk-forward-backtest-v2") return "백테스트 (평균 적중)";
@@ -1347,9 +1349,11 @@
     function renderLstmRecommendations(prediction, data) {
       if (!prediction) return "";
       const isStale = Number(prediction.sourceLatestRound) !== Number(data.latestRound);
+      const tag = isStale ? `<span class="stat-pill warn">${prediction.sourceLatestRound}회 기준</span>` : "";
       return renderRecommendationGroup("LSTM",
-        prediction.recommendations.filter((rec) => rec.method.startsWith("lstm")),
-        isStale ? `<span class="stat-pill warn">${prediction.sourceLatestRound}회 기준</span>` : "");
+        prediction.recommendations.filter((rec) => rec.method.startsWith("lstm") && rec.method !== "lstm-refit-25-v1"), tag)
+        + renderRecommendationGroup(methodLabel("lstm-refit-25-v1"),
+          prediction.recommendations.filter((rec) => rec.method === "lstm-refit-25-v1"), tag);
     }
 
     function renderLstmMetrics(prediction) {
@@ -1415,7 +1419,7 @@
       const comparison = prediction?.comparison;
       if (!comparison) return "";
       const methods = comparison.methods.filter((row) =>
-        ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2", "lstm-stateful-ball-weighted-v3"].includes(row?.method));
+        ["uniform", "weighted-statistical-v2", "lstm-number-weighted-v2", "lstm-stateful-ball-weighted-v3", "lstm-refit-25-v1"].includes(row?.method));
       return `
         <h3>동일 조건 비교</h3>
         <div class="stat-pills">
